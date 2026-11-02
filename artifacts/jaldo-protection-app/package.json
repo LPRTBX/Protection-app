@@ -1,0 +1,30 @@
+{
+  "name": "@workspace/jaldo-protection-app",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --config vite.config.ts --host 0.0.0.0",
+    "build": "vite build --config vite.config.ts",
+    "serve": "vite preview --config vite.config.ts --host 0.0.0.0",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx/esm --test src/tests/*.test.ts src/tests/*.test.tsx",
+    "ui-check": "node scripts/ui-check.mjs"
+  },
+  "dependencies": {
+    "@workspace/design": "workspace:*",
+    "@workspace/jaldo-orchestration": "workspace:*",
+    "react": "catalog:",
+    "react-dom": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "axe-core": "^4.10.0",
+    "playwright": "1.56.1",
+    "tsx": "catalog:",
+    "vite": "catalog:"
+  }
+}

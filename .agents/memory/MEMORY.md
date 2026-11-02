@@ -1,0 +1,1 @@
+- [Protection preview boundary](protection-preview-boundary.md) — restore the reviewed app without redesign; development-only simulation, other apps untouched, no live services or publishing.

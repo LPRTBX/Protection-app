@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/protection-app/"
+title = "JALDO Protection — reviewed development preview"
+description = "Development-only import of the reviewed JALDO Protection specialist app. Original browser simulation, shared orchestration kernel and design package; no live services or real customer data."
+version = "1.0.0"
+id = "artifacts/jaldo-protection-app"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/protection-app/" ]
+localPort = 21166
+
+[services.development]
+run = "pnpm --filter @workspace/jaldo-protection-app run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/jaldo-protection-app", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/jaldo-protection-app/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "21166"
+BASE_PATH = "/protection-app/"

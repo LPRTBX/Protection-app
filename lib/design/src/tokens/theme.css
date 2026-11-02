@@ -1,0 +1,114 @@
+/**
+ * JALDO approved visual tokens — Phase 1B.
+ *
+ * Executable CSS custom properties implementing the semantic contract
+ * documented in `./contract.ts` (see that file for full rationale, WCAG
+ * contrast figures, and the light/dark value table this CSS mirrors).
+ *
+ * NOT WIRED IN ANYWHERE YET. Neither `artifacts/rtbx/src/index.css` nor
+ * `artifacts/intelligence-investment-hub/src/index.css` imports this file
+ * in Phase 1B — that is a deliberate, separate, later decision (consumer
+ * migration). Importing this file today changes nothing in either app.
+ *
+ * Mode strategy: `:root` holds the light values, `.dark` overrides them —
+ * the same pattern already used by both apps' own `index.css` files. Radius
+ * is mode-agnostic (declared once, in `:root`) since corner geometry does
+ * not change between light and dark.
+ */
+
+:root {
+  /* ---- JALDO semantic colour tokens — LIGHT ------------------------- */
+  --jaldo-bg: #ffffff;
+  --jaldo-surface: #f7f8fa;
+  --jaldo-surface-elevated: #ffffff;
+  --jaldo-text: #0b1b33;
+  --jaldo-text-muted: #5b6b82;
+  --jaldo-border: #e2e6ec;
+  --jaldo-primary: #0f2a4a;
+  --jaldo-secondary: #0f6e6e;
+  --jaldo-accent: #b85510;
+  --jaldo-success: #177a4d;
+  --jaldo-warning: #92680f;
+  --jaldo-danger: #c22f2f;
+  --jaldo-info: #253cd0;
+
+  /*
+   * Foreground for filled ACCENT/STATUS surfaces only (accent, success,
+   * warning, danger, info) — one shared token, per the approved rule:
+   * "do not invent separate foreground colours for each status."
+   * White clears WCAG AA (>=4.5:1) against all five light-mode fills;
+   * see contract.ts for the exact ratio per colour.
+   */
+  --jaldo-on-filled: #ffffff;
+
+  /*
+   * Primary and secondary are brand-chrome buttons, not status colours,
+   * and were not part of the approved uniform accent/status rule — each
+   * needs its own genuinely-checked pairing (see contract.ts). Both take
+   * white in light mode.
+   */
+  --jaldo-on-primary: #ffffff;
+  --jaldo-on-secondary: #ffffff;
+
+  /* ---- Radius scale (mode-agnostic) ---------------------------------- */
+  --jaldo-radius-sm: 4px;
+  --jaldo-radius-md: 6px;
+  --jaldo-radius-lg: 10px;
+  --jaldo-radius-xl: 14px;
+
+  /*
+   * Elevation — restrained, three levels, shadow colour derived from the
+   * navy primary's own hue (~212°) rather than generic black, so elevation
+   * reads as part of the JALDO palette rather than a default UI shadow.
+   */
+  --jaldo-shadow-sm: 0 1px 2px hsl(212 45% 12% / 0.06);
+  --jaldo-shadow-md: 0 4px 10px hsl(212 45% 12% / 0.1);
+  --jaldo-shadow-lg: 0 12px 28px hsl(212 45% 12% / 0.14);
+}
+
+.dark {
+  /* ---- JALDO semantic colour tokens — DARK --------------------------- */
+  --jaldo-bg: #0a1420;
+  --jaldo-surface: #0f1b2c;
+  --jaldo-surface-elevated: #142338;
+  --jaldo-text: #f3f6fa;
+  --jaldo-text-muted: #9aacc2;
+  --jaldo-border: #24344a;
+  --jaldo-primary: #3e6fa8;
+  --jaldo-secondary: #2ba3a3;
+  --jaldo-accent: #f0793a;
+  --jaldo-success: #34b876;
+  --jaldo-warning: #d9a227;
+  --jaldo-danger: #e55959;
+  --jaldo-info: #6577e8;
+
+  /*
+   * Approved dark-mode rule for filled accent/status surfaces: foreground
+   * is the app's own --jaldo-bg dark value, not white — white fails WCAG
+   * AA against every one of these dark-mode fills (as low as 2.80:1 for
+   * accent). See contract.ts for the exact ratio per colour.
+   */
+  --jaldo-on-filled: #0a1420;
+
+  /*
+   * Primary/secondary in dark mode do NOT follow the --jaldo-on-filled
+   * rule above — that rule was approved for accent/status fills only.
+   * Checked independently: dark primary (#3e6fa8) contrasts better with
+   * white (5.19:1) than with #0a1420 (3.57:1, fails AA), so it keeps
+   * white. Dark secondary (#2ba3a3) is the opposite: white fails
+   * (3.06:1), #0a1420 passes (6.06:1). Applying one rule to both would
+   * have shipped a real AA failure on one of them — see contract.ts.
+   */
+  --jaldo-on-primary: #ffffff;
+  --jaldo-on-secondary: #0a1420;
+
+  /*
+   * Dark-mode elevation uses a much darker, higher-opacity version of the
+   * same navy hue — a light navy-tinted shadow (as used in light mode)
+   * would not be visible against an already-dark navy surface. Restrained
+   * still means three levels only, no new hue introduced.
+   */
+  --jaldo-shadow-sm: 0 1px 2px hsl(220 60% 2% / 0.35);
+  --jaldo-shadow-md: 0 4px 10px hsl(220 60% 2% / 0.45);
+  --jaldo-shadow-lg: 0 12px 28px hsl(220 60% 2% / 0.55);
+}
