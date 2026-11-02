@@ -20,8 +20,8 @@ import {
   type SubjectView,
 } from "@workspace/jaldo-orchestration";
 import { PROTECTION } from "../config/protection-config";
-import { makeExecutor, defaultScripts, PRESETS, type Behaviour, type ConnectorKey, type ConnectorScript, type PresetId, type ReadBack } from "./connectors";
-import { CONTACT_CHOICES, CUSTOMER, FICTIONAL_NOTES, OPERATIONS, REVIEWER, SCOPE, SIMULATION_START, type ContactChoice, type Duration } from "./scope";
+import { makeExecutor, defaultScripts, PRESETS, P2_PRESETS, type Behaviour, type ConnectorKey, type ConnectorScript, type P2PresetId, type PresetId, type ReadBack } from "./connectors";
+import { CONTACT_CHOICES, CONTEXT_LABEL, CUSTOMER, FICTIONAL_NOTES, INTAKE, OPERATIONS, P1_ACTION_TYPES, P2_ACTION_TYPES, REVIEWER, SCOPE, SIGNAL, SIMULATION_START, defaultVariant, type ContactChoice, type ContextState, type Duration, type ScenarioId, type Variant } from "./scope";
 import { stageOf, type StageView } from "./stage";
 
 /**
@@ -72,6 +72,9 @@ const OUTREACH = "support-handover";
 /** A correction exists only for a protection whose read-back did not match. original type -> correction type. */
 export const CORRECTION_OF: Record<string, string> = { "account-break": "account-break-correction", "marketing-suppression": "marketing-suppression-correction" };
 const REQUEST_EVENT = "customer.break-requested";
+const SIGNAL_EVENT = "protection.review-requested";
+/** Discretionary early-support outreach: needs current source context AND the customer's current contact choice. */
+const CHECKIN = "early-support-checkin";
 const CAPACITY_EVENT = "connector.capacity-changed";
 
 export interface SubmitInput {
@@ -95,7 +98,11 @@ export class ProtectionWorld {
   readonly readBacks: ReadBackRecord[] = [];
   readonly unavailable = new Set<string>();
   scripts: Record<ConnectorKey, ConnectorScript> = defaultScripts();
-  preset: PresetId | "custom" = "happy";
+  preset: PresetId | P2PresetId | "custom" = "happy";
+  /** Which scenario this session is for. Chosen before any record exists; switching needs an explicit reset. */
+  scenario: ScenarioId = "customer-break";
+  /** P2 variant (source context and contact choice on file). Chosen before admission; frozen once the event is admitted. */
+  variant: Variant = defaultVariant();
   /** Actions whose send timed out AND which in fact arrived. Known only to the simulated receiving system. */
   private readonly arrived = new Set<string>();
   /** The reviewer's approval responsibility can be revoked in the simulation to show that authority is checked on every use. */
@@ -133,6 +140,8 @@ export class ProtectionWorld {
     this.requestRef = null;
     this.receivedAt = null;
     this.contactNow = null;
+    this.scenario = "customer-break";
+    this.variant = defaultVariant();
     this.n = 0;
     this.notify();
   }
@@ -141,6 +150,40 @@ export class ProtectionWorld {
     this.now = new Date(this.now.getTime() + days * 86_400_000);
     this.history.push({ at: this.now, ok: true, by: "Simulation", did: `Advanced the simulated clock by ${days} day${days === 1 ? "" : "s"}`, result: "Nothing is sent or changed by time passing. Configured expectations are re-read." });
     this.notify();
+  }
+
+  // ───────────────────────── scenario selection (creates no record) ─────────────────────────
+  /** Choose a scenario. Writes nothing operational. Refused while records exist: an explicit reset clears everything first. */
+  selectScenario(id: ScenarioId): Outcome {
+    if (id === this.scenario) return { ok: true, note: "Already selected." };
+    if (this.state) return { ok: false, code: "reset_required", message: "Records exist in this scenario. Reset first: a reset clears records, permissions, approvals, messages and scripts, so nothing carries across." };
+    this.scenario = id;
+    this.scripts = defaultScripts();
+    this.preset = id === "customer-break" ? "happy" : "p2-current";
+    this.variant = defaultVariant();
+    this.notify();
+    return { ok: true, note: "Scenario selected. Nothing has been admitted." };
+  }
+  setVariant(patch: Partial<Variant>): Outcome {
+    if (this.state) return { ok: false, code: "variant_frozen", message: "The event has been admitted, so its context and contact record are frozen. Reset to choose another variant." };
+    this.variant = { ...this.variant, ...patch };
+    this.preset = "custom";
+    this.notify();
+    return { ok: true, note: "Variant set." };
+  }
+  applyP2Preset(id: P2PresetId): Outcome {
+    if (this.scenario !== "early-support") return { ok: false, code: "wrong_scenario", message: "Select the early-support scenario first." };
+    const preset = P2_PRESETS.find((p) => p.id === id)!;
+    if (this.state && (preset.variant.context !== this.variant.context || preset.variant.contact !== this.variant.contact)) {
+      return { ok: false, code: "variant_frozen", message: "The event has been admitted, so its context and contact record are frozen. Reset to choose another variant." };
+    }
+    const next = defaultScripts();
+    for (const [k, v] of Object.entries(preset.scripts)) next[k as ConnectorKey] = { ...next[k as ConnectorKey], ...v };
+    this.scripts = next;
+    if (!this.state) this.variant = { context: preset.variant.context as ContextState, contact: preset.variant.contact as Variant["contact"] };
+    this.preset = id;
+    this.notify();
+    return { ok: true, note: "Preset applied." };
   }
 
   applyPreset(id: PresetId) {
@@ -198,6 +241,10 @@ export class ProtectionWorld {
   supportAgent(): Actor {
     return { kind: "member", id: "support-agent-fictional", coreRole: "operator", scope: SCOPE, grants: [{ responsibility: "support-agent", grantedAt: SIMULATION_START.toISOString(), expiresAt: null, revokedAt: null }] };
   }
+  /** The signal-intake member: holds ONLY `prepare`. It can admit a permitted event; it cannot hold, approve or send anything. */
+  intake(): Actor {
+    return { kind: "member", id: INTAKE.memberId, coreRole: "operator", scope: SCOPE, grants: [{ responsibility: "signal-intake", grantedAt: SIMULATION_START.toISOString(), expiresAt: null, revokedAt: null }] };
+  }
   customerActor(): Actor {
     return { kind: "party", key: "customer", scope: SCOPE };
   }
@@ -221,6 +268,7 @@ export class ProtectionWorld {
     if (actor.kind === "system") return "JALDO Core (automation)";
     if (actor.id === REVIEWER.memberId) return REVIEWER.label;
     if (actor.id === OPERATIONS.memberId) return OPERATIONS.label;
+    if (actor.id === INTAKE.memberId) return `${INTAKE.label} for the simulated upstream source`;
     return "Support agent (fictional)";
   }
   partyLabel(key: string) {
@@ -259,6 +307,26 @@ export class ProtectionWorld {
    */
   private boundary(command: Command): { code: string; message: string } | null {
     const typeOfAction = (id: string) => this.action(id)?.typeId ?? null;
+    // 0. Scenario scoping. P1's controls exist only for the customer's own request; P2's early-support types only for a review
+    //    request. A signal never creates a restriction, and a customer request never creates a check-in.
+    if (command.type === "propose") {
+      const wrong = this.scenario === "early-support" ? (P1_ACTION_TYPES as readonly string[]).includes(command.actionType) : (P2_ACTION_TYPES as readonly string[]).includes(command.actionType);
+      if (wrong) {
+        return {
+          code: "not_in_scenario",
+          message: this.scenario === "early-support"
+            ? "This scenario starts from an upstream review request, not from the customer's own request, so no account, marketing or support control is created. A control needs the customer's own separately recorded request and fresh approvals."
+            : "Early-support review actions exist only in the operator-originated scenario.",
+        };
+      }
+    }
+    // 0b. Discretionary early-support outreach needs current source context AND current optional-contact permission, re-read at
+    //     every step. Fresh context never creates permission. Demo boundary only; production needs Core to enforce both.
+    const checkinTarget = command.type === "propose" ? command.actionType === CHECKIN : ["submit", "approve", "execute"].includes(command.type) && typeOfAction((command as { actionId: string }).actionId) === CHECKIN;
+    if (checkinTarget) {
+      const why = this.checkinBlockers();
+      if (why.length) return { code: why[0].code, message: `${why.map((x) => x.message).join(" ")} This check is the demo's own; production needs Core to enforce it. Existing protections are not changed.` };
+    }
     const gated =
       (command.type === "propose" && command.actionType === OUTREACH) ||
       (["submit", "approve", "execute"].includes(command.type) && typeOfAction((command as { actionId: string }).actionId) === OUTREACH);
@@ -288,6 +356,19 @@ export class ProtectionWorld {
     }
     return null;
   }
+  /** What currently blocks the optional early-support check-in, in the order it is explained. Empty means nothing blocks it. */
+  checkinBlockers(): { code: string; message: string }[] {
+    const out: { code: string; message: string }[] = [];
+    const ctx = this.contextState();
+    if (ctx !== "current") out.push({ code: "context_not_current", message: `The source context is ${CONTEXT_LABEL[ctx].toLowerCase()}, so a discretionary check-in that depends on it is blocked. Clarification can be requested instead.` });
+    if (!this.supportOutreachPermitted()) out.push({ code: "permission_declined", message: "The customer's current contact choice does not permit optional outreach. Fresh context does not create contact permission." });
+    return out;
+  }
+  /** The source context state of the admitted event (from the frozen request), or the selected variant before admission. */
+  contextState(): ContextState {
+    const v = this.state?.request.find((f) => f.id === "freshness")?.value;
+    return (["Current", "Stale", "Missing"].includes(v ?? "") ? (v!.toLowerCase() as ContextState) : this.variant.context);
+  }
   isCorrectionType(typeId: string): boolean {
     return Object.values(CORRECTION_OF).includes(typeId);
   }
@@ -304,6 +385,7 @@ export class ProtectionWorld {
   // ───────────────────────── customer ─────────────────────────
   /** The customer submits their own request through their own channel. The kernel admits it or refuses it. */
   submitRequest(input: SubmitInput): Outcome {
+    if (this.scenario !== "customer-break") return this.fail(CUSTOMER.alias, "Submitted a break request", { code: "wrong_scenario", message: "This scenario starts from an upstream review request. A customer break request here would be a separate coordination, which this prototype does not hold alongside it. Reset and choose the customer-requested scenario." });
     if (this.state) return this.fail(CUSTOMER.alias, "Submitted a break request", { code: "already_open", message: "A request is already open in this simulation. Reset to start again." });
     const def = this.config.events.find((e) => e.type === REQUEST_EVENT)!;
     const note = FICTIONAL_NOTES.find((n) => n.text === input.note)?.text;
@@ -319,7 +401,7 @@ export class ProtectionWorld {
       provenance: { method: "party-channel" },
       purpose: def.purpose,
       classification: def.maxClassification,
-      context: { who: CUSTOMER.alias, ask: "A break from gambling", duration: input.duration, contact: input.contact, note },
+      context: { who: CUSTOMER.alias, ask: "A break from gambling", duration: input.duration, contact: input.contact, note, origin: "Customer-requested break", source: "Customer app (simulated channel)", reference: "REQ-0001", basis: "The customer's own request. Nothing is inferred.", freshness: "Current" },
     };
     const r = openCoordination(this.config, event, { destination: REVIEWER.memberId }, this.customerActor(), this.facts());
     if (!r.ok) return this.fail(CUSTOMER.alias, "Submitted a break request", r);
@@ -330,6 +412,54 @@ export class ProtectionWorld {
     this.receivedAt = this.now;
     this.record(CUSTOMER.alias, "Submitted a break request", true, "The request was admitted by the kernel and addressed to the protection reviewer.");
     return { ok: true, note: "Request sent." };
+  }
+
+  // ───────────────────────── P2: the simulated upstream source's event ─────────────────────────
+  /**
+   * The simulated upstream source sends its fixed review event, and the signal-intake member admits it. This is the ONLY way a P2
+   * coordination opens. It is never attributed to the customer, never calls `submitRequest`, and records no customer consent. Nothing
+   * is prepared, proposed, approved or sent by admission. The contact choice on file is a pre-existing fictional record.
+   */
+  admitSignal(): Outcome {
+    const did = "Admitted the simulated upstream review event";
+    if (this.scenario !== "early-support") return this.fail(INTAKE.label, did, { code: "wrong_scenario", message: "Select the early-support scenario first." });
+    if (this.state) return this.fail(INTAKE.label, did, { code: "already_open", message: "An event has already been admitted in this simulation. Reset to start again." });
+    const def = this.config.events.find((e) => e.type === SIGNAL_EVENT)!;
+    const ctx = this.variant.context;
+    const onFile = this.variant.contact === "permitted" ? CONTACT_CHOICES[0].id : CONTACT_CHOICES[1].id;
+    const event = {
+      schema: "jaldo.event",
+      id: `evt-${++this.n}`,
+      idempotencyKey: `signal-${this.n}`,
+      type: SIGNAL_EVENT,
+      occurredAt: this.now.toISOString(),
+      scope: SCOPE,
+      source: { system: "upstream-protection-source", reference: SIGNAL.reference },
+      provenance: { method: "integration", recordedBy: INTAKE.memberId },
+      purpose: def.purpose,
+      classification: def.maxClassification,
+      context: {
+        who: SIGNAL.alias,
+        ask: "Review requested by an upstream source. The customer has asked for nothing.",
+        duration: "Not applicable (not a break request)",
+        contact: onFile,
+        note: "Not applicable (no customer message)",
+        origin: "Operator-originated early-support review",
+        source: SIGNAL.source,
+        reference: SIGNAL.reference,
+        basis: ctx === "missing" ? "(no usable context supplied by the source)" : `Reason code ${SIGNAL.reasonCode} supplied by the source (fictional). Not interpreted, scored or verified by JALDO.`,
+        freshness: CONTEXT_LABEL[ctx],
+      },
+    };
+    const r = openCoordination(this.config, event, { destination: REVIEWER.memberId }, this.intake(), this.facts());
+    if (!r.ok) return this.fail(this.who(this.intake()), did, r);
+    this.state = r.state;
+    this.evidence.push(...r.evidence);
+    this.requestRef = SIGNAL.reference;
+    this.receivedAt = this.now;
+    this.contactNow = this.variant.contact === "permitted" ? CONTACT_CHOICES[0].id : CONTACT_CHOICES[1].id;
+    this.record(this.who(this.intake()), did, true, "The kernel admitted the event and addressed it to the protection reviewer. It records that a review was requested by a simulated source. It is not evidence of harm, and nothing was proposed, approved or sent.");
+    return { ok: true, note: "Event admitted." };
   }
 
   /** The customer changes their contact choice. A frozen disclosure is never rewritten; later commands read the new choice. */
@@ -350,6 +480,7 @@ export class ProtectionWorld {
   }
   /** The kernel prepares the configured plan as proposals only. Nothing is approved or sent. */
   preparePlan(): Outcome {
+    if (this.scenario === "early-support") return this.fail("JALDO Core (automation)", "Prepared the configured plan", { code: "not_in_scenario", message: "The configured plan prepares P1 account and marketing proposals. It is never prepared for an operator-originated review: a signal creates no restriction. (Scenario-scoped plans are a Core gap.)" });
     if (!this.state) return { ok: false, code: "not_found", message: "No request is open." };
     const r = runAnticipatoryCycle(this.config, this.state, this.facts(), `cycle-${++this.n}`);
     this.state = r.state;

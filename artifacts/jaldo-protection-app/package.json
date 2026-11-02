@@ -9,7 +9,8 @@
     "serve": "vite preview --config vite.config.ts --host 0.0.0.0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --import tsx/esm --test src/tests/*.test.ts src/tests/*.test.tsx",
-    "ui-check": "node scripts/ui-check.mjs"
+    "ui-check": "node scripts/ui-check.mjs",
+    "mutation": "node scripts/mutation-check.mjs"
   },
   "dependencies": {
     "@workspace/design": "workspace:*",

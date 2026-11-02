@@ -65,7 +65,7 @@ export function Shell({ initialRoute }: { initialRoute?: string }) {
         </button>
       </header>
       <div className="context" role="region" aria-label="Prototype status">
-        <p className="ctx-labels"><StatusChip status="simulation" /> <span><strong>Prototype P1.</strong> Fictional data, in this browser only. No live systems.</span></p>
+        <p className="ctx-labels"><StatusChip status="simulation" /> <span><strong>Prototype {world.scenario === "early-support" ? "P2" : "P1"}.</strong> Fictional data, in this browser only. No live systems.</span></p>
       </div>
 
       <div className="layout">

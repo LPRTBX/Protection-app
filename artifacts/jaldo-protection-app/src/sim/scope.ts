@@ -44,3 +44,44 @@ export const FICTIONAL_NOTES = [
   { id: "time", text: "I want to spend less time on the app. (fictional example)" },
   { id: "space", text: "I would like some space this month. (fictional example)" },
 ] as const;
+
+// ───────────── P2: operator-originated early-support review ─────────────
+export const SCENARIOS = [
+  { id: "customer-break", label: "Customer-requested break", tag: "P1, unchanged", detail: "The customer asks for a break. A person authorises each account and marketing action." },
+  { id: "early-support", label: "Operator-originated early-support review", tag: "P2", detail: "A fictional upstream source asks for a human early-support review. Nothing is applied to anyone's account." },
+] as const;
+export type ScenarioId = (typeof SCENARIOS)[number]["id"];
+
+/** The fixed fictional signal. A review request is evidence that a review was requested, not that harm or wrongdoing occurred. */
+export const SIGNAL = {
+  alias: "Customer C-2087 (fictional)",
+  reference: "SRC-9001",
+  source: "Upstream protection source (simulated)",
+  reasonCode: "R-14",
+} as const;
+export const INTAKE = { memberId: "intake-fictional", label: "Signal intake (fictional)" } as const;
+
+export const CONTEXTS = ["current", "stale", "missing"] as const;
+export type ContextState = (typeof CONTEXTS)[number];
+export const CONTEXT_LABEL: Record<ContextState, string> = { current: "Current", stale: "Stale", missing: "Missing" };
+export const CONTEXT_TEXT: Record<ContextState, string> = {
+  current: "The source's context is current (inside the configured limit of 24 hours, fictional).",
+  stale: "The source's context is older than the configured limit of 24 hours (fictional). It cannot support a discretionary check-in.",
+  missing: "The source supplied no usable context. It cannot support a discretionary check-in.",
+};
+export interface Variant {
+  context: ContextState;
+  /** The contact choice ON FILE (a fictional record). It is not consent to this review or to any particular message. */
+  contact: "permitted" | "not-permitted";
+}
+export const defaultVariant = (): Variant => ({ context: "current", contact: "permitted" });
+
+/** Action types that belong to each scenario. The command boundary refuses the other scenario's types. */
+export const P1_ACTION_TYPES = [
+  "account-break", "marketing-suppression", "support-handover", "customer-account-notice", "customer-marketing-notice", "account-break-manual", "customer-manual-notice",
+  "account-break-correction", "marketing-suppression-correction", "customer-account-correction-notice", "customer-marketing-correction-notice",
+] as const;
+export const P2_ACTION_TYPES = ["early-support-checkin", "context-clarification-request"] as const;
+
+/** The fixed invitation. The customer sees it only once the in-app channel reports it delivered. */
+export const INVITATION_TITLE = "A message from the team";

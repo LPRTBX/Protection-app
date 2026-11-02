@@ -19,7 +19,7 @@ export function CustomerApp({ tab }: { tab: CustomerTab }) {
   return (
     <div className="phone-stage">
       <div className="viewpoint" role="note">
-        <strong>Viewing as: the customer.</strong> Shows only your own request and messages a team member approved.
+        <strong>Viewing as: the customer.</strong> {v.scenario === "early-support" ? "Shows only messages a team member approved, and your own choices." : "Shows only your own request and messages a team member approved."}
       </div>
       <div className="phone" data-testid="customer-app">
         <header className="app-head">
@@ -68,13 +68,15 @@ function Today({ v }: { v: CustomerView }) {
         <p>{v.headline.body}</p>
       </section>
 
-      {!v.hasRequest ? (
+      {v.invitation ? <Invitation v={v} /> : null}
+
+      {!v.hasRequest && !v.invitation ? (
         <section className="card">
           <h3>Take a break</h3>
           <p>In this demo you can ask for a break and see how each part is authorised, applied and checked. Nothing real is changed.</p>
           <a className="btn btn-primary" href="#/customer/options">See your options</a>
         </section>
-      ) : (
+      ) : !v.hasRequest ? null : (
         <>
           <section className="card" aria-labelledby="req-h">
             <h3 id="req-h">What you asked for</h3>
@@ -122,6 +124,50 @@ function Today({ v }: { v: CustomerView }) {
         </>
       )}
     </>
+  );
+}
+
+/**
+ * P2: the fixed, supportive invitation, shown only once the in-app channel has reported it delivered. Four DISTINCT choices.
+ * Opening this message is not consent and is not recorded; not replying changes nothing.
+ */
+function Invitation({ v }: { v: CustomerView }) {
+  const w = useWorld();
+  const [outcome, setOutcome] = useOutcome();
+  const inv = v.invitation!;
+  return (
+    <section className="card invitation" aria-labelledby="inv-h" data-testid="invitation">
+      <h2 id="inv-h">{inv.title}</h2>
+      <p>{inv.body}</p>
+      <p className="muted"><time>{inv.at}</time></p>
+      <p className="muted">Opening this message is not a request and does not mean you agree to anything. Not replying changes nothing.</p>
+      <h3>What you can do, if you want to</h3>
+      <ul className="choices">
+        <li>
+          <a className="btn btn-quiet" href="#/customer/support">Look at the support information</a>
+          <span className="hint">Information only.</span>
+        </li>
+        <li>
+          <span className="btn btn-quiet is-off" aria-disabled="true" role="note">Ask Support to contact me</span>
+          <span className="hint">Not available in this prototype: asking for support yourself is not modelled by the accepted kernel yet.</span>
+        </li>
+        <li>
+          <a className="btn btn-quiet" href="#/customer/options">Ask for a break yourself</a>
+          <span className="hint">Your own request, with its own approvals. Never started from this message.</span>
+        </li>
+        <li>
+          {v.optedOut ? (
+            <p className="note" data-testid="opted-out">You have chosen not to get optional support messages. Nothing about your account changes because of this, and you can change it in Support.</p>
+          ) : (
+            <>
+              <button type="button" className="btn btn-quiet" onClick={() => setOutcome(w.changeContactChoice(CONTACT_CHOICES[1].id))}>No thanks: no more optional support messages</button>
+              <span className="hint">Your choice. It does not affect your account.</span>
+            </>
+          )}
+        </li>
+      </ul>
+      <Result outcome={outcome} />
+    </section>
   );
 }
 
@@ -217,7 +263,9 @@ function Options({ v }: { v: CustomerView }) {
           <li key={o.id} className="card">
             <h2>{o.label}</h2>
             <p>{o.summary}</p>
-            {o.live ? (
+            {o.live && v.scenario === "early-support" ? (
+              <p className="muted">In this prototype a break you ask for yourself is a separate request with its own approvals, so it is not available alongside this message. It would never be started for you.</p>
+            ) : o.live ? (
               v.hasRequest ? (
                 <p className="muted">You have already asked for a break. See <a href="#/customer/today">Today</a> for where it is up to.</p>
               ) : (
@@ -265,14 +313,14 @@ function Support({ v }: { v: CustomerView }) {
           <li>Nobody scores or rates you. Nothing here decides anything about you.</li>
         </ul>
       </section>
-      {v.request ? (
+      {v.contact ? (
         <section className="card" aria-labelledby="s4">
           <h2 id="s4">Your contact choice</h2>
           <fieldset className="choice">
             <legend>Optional support messages</legend>
             {CONTACT_CHOICES.map((c) => (
-              <label key={c.id} className={v.request!.contact === c.id ? "on" : ""}>
-                <input type="radio" name="contact-now" value={c.id} checked={v.request!.contact === c.id} onChange={() => setOutcome(w.changeContactChoice(c.id))} />
+              <label key={c.id} className={v.contact === c.id ? "on" : ""}>
+                <input type="radio" name="contact-now" value={c.id} checked={v.contact === c.id} onChange={() => setOutcome(w.changeContactChoice(c.id))} />
                 <span><strong>{c.label}</strong><small>{c.detail}</small></span>
               </label>
             ))}

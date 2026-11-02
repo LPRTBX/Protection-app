@@ -24,6 +24,9 @@ export function About() {
         <p>JALDO Protection Stage P1 is a mobile-first prototype of one governed journey: a customer asks for a break, a person authorises specific actions, separate simulated systems apply them, and each role sees only what it needs.</p>
         <p>It reuses the shared JALDO orchestration kernel through a configuration ({PROTECTION.id} v{PROTECTION.version}). It adds no second orchestration engine and does not claim live Core integration. The existing public Protection demonstration under /api/protection/ is untouched.</p>
       </Panel>
+      <Panel title="Two scenarios, one app" status="implemented">
+        <p><strong>Customer-requested break (P1)</strong> starts when the customer asks. <strong>Operator-originated early-support review (P2)</strong> starts when a fictional upstream source asks for a human review. Both use the same kernel and the same three role views. A signal never creates a restriction, and a review request is not evidence that harm occurred. See docs/protection-app/P2-design.md.</p>
+      </Panel>
       <Panel title="Screen map" status="implemented">
         <div className="table-wrap" tabIndex={0} role="region" aria-label="Screens table, scrolls sideways on small screens">
           <table>
@@ -47,6 +50,7 @@ export function About() {
           <li>Live JALDO Core integration, tenant-scoped storage and server-enforced permissions.</li>
           <li>Real identity, authentication and identity matching.</li>
           <li>Verified, jurisdiction-specific help and self-exclusion information. JALDO does not perform registration.</li>
+          <li>Scenario-scoped plans, multiple request events (a source-context refresh), permissions and context freshness as kernel preconditions, and customer-requested support: kernel capabilities that do not exist yet. P2 checks them at the demo command boundary only.</li>
           <li>Real connectors to account controls, marketing suppression and support systems, and a real notification channel.</li>
           <li>A durable communication-permissions store and authenticated server enforcement. The check in this prototype is client-side and is not production enforcement.</li>
           <li>Expectations measured in minutes or hours (the kernel's smallest unit is one day).</li>

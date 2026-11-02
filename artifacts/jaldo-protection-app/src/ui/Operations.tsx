@@ -20,12 +20,12 @@ export function Operations() {
   return (
     <>
       <div className="viewpoint" role="note">
-        <strong>Viewing as: Protection Operations.</strong> You see what was sent to each connected system and what came back. You cannot approve actions, record a system's response for it, or see the customer's own words or contact choice.
+        <strong>Viewing as: Protection Operations.</strong> You see what was sent to each connected system and what came back. You cannot approve actions, record a system's response for it, or see the customer's own words or contact details.
       </div>
 
       <Panel title="Where everything stands" status="implemented" id="overview">
         {!v.hasWork ? (
-          <Empty>No protection work yet. Work appears here after the reviewer authorises actions.</Empty>
+          <Empty>{v.scenario === "early-support" ? "No work yet. An instruction appears here only after a named person authorises it. You never see the review context." : "No protection work yet. Work appears here after the reviewer authorises actions."}</Empty>
         ) : (
           <ul className="counts" aria-label="Protection actions by stage">
             {[...STAGES, "closed" as const].map((s) => (
@@ -36,9 +36,18 @@ export function Operations() {
         <p className="muted">Sent is not received. Received is not accepted. Accepted is not applied. Applied is a report, not a check. Confirmed means a simulated read-back recorded in this demo matched and a person recorded it; it is not proof of wellbeing, reduced harm or operator compliance.</p>
       </Panel>
 
-      <Section title="Account-control execution" id="account" rows={v.account} empty="No account-control work yet." setOutcome={setOutcome} />
-      <Section title="Marketing suppression" id="marketing" rows={v.marketing} empty="No marketing suppression yet." setOutcome={setOutcome} />
-      <Section title="Support coordination (lifecycle only)" id="support" rows={v.support} empty="No support handover. Optional support outreach exists only if the customer's current permission allows it." setOutcome={setOutcome} />
+      {v.scenario === "early-support" ? (
+        <>
+          <Section title="In-app message delivery" id="delivery" rows={v.delivery} empty="No in-app message delivery has been authorised. Nothing is delivered until a named person approves it." setOutcome={setOutcome} />
+          <Section title="Source clarification" id="clarification" rows={v.clarification} empty="No clarification has been requested." setOutcome={setOutcome} />
+        </>
+      ) : (
+        <>
+          <Section title="Account-control execution" id="account" rows={v.account} empty="No account-control work yet." setOutcome={setOutcome} />
+          <Section title="Marketing suppression" id="marketing" rows={v.marketing} empty="No marketing suppression yet." setOutcome={setOutcome} />
+          <Section title="Support coordination (lifecycle only)" id="support" rows={v.support} empty="No support handover. Optional support outreach exists only if the customer's current permission allows it." setOutcome={setOutcome} />
+        </>
+      )}
 
       <Panel title="Unresolved gaps" status="implemented" id="gaps" intro="Everything authorised or sent that is not yet confirmed, and who owns the next step.">
         {v.gaps.length === 0 ? (
@@ -56,9 +65,9 @@ export function Operations() {
       </Panel>
 
       <Systems v={v} setOutcome={setOutcome} />
-      <AuthorityCheck setOutcome={setOutcome} ids={[...v.account, ...v.marketing, ...v.support].map((r) => r.id)} />
+      <AuthorityCheck setOutcome={setOutcome} ids={[...v.account, ...v.marketing, ...v.support, ...v.delivery, ...v.clarification].map((r) => r.id)} />
 
-      <Panel title="Recorded evidence" status="implemented" id="evidence" intro="What the kernel recorded about these actions, in order. Customer details and optional-support history are not in this record. The simulated system log is not Core evidence.">
+      <Panel title="Recorded evidence" status="implemented" id="evidence" intro="What the kernel recorded about these actions, in order. Customer details and support history are not in this record. The simulated system log is not Core evidence.">
         <details open>
           <summary>Kernel evidence ({v.evidence.length})</summary>
           <ol className="log" data-testid="ops-evidence">{v.evidence.map((e) => <li key={e.sequence}><span className="muted">#{e.sequence} · {e.at} · {e.actor} · {e.strength}</span><br />{e.text}</li>)}</ol>

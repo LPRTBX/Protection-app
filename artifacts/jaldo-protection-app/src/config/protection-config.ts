@@ -1,7 +1,10 @@
 import { loadConfiguration, type DeploymentConfiguration } from "@workspace/jaldo-orchestration";
 
 /**
- * JALDO Protection — "customer asks for a break" (fictional deployment configuration).
+ * JALDO Protection — two scenarios in ONE fictional deployment configuration: P1 "customer asks for a break" and P2 "an upstream
+ * source asks for a human early-support review". Scenario scoping, current-context and contact-permission checks are demo-boundary checks in
+ * `src/sim/session.ts`, not kernel rules (see docs/protection-app/P2-design.md §1 and §10).
+ *
  *
  * This is CONFIGURATION for the shared JALDO kernel, in the same form as the Sport and Enterprise reference
  * configurations. It defines parties, roles, actions, policies and approved wording. It defines no state machine, no
@@ -20,10 +23,10 @@ import { loadConfiguration, type DeploymentConfiguration } from "@workspace/jald
 export const PROTECTION_CONFIGURATION = {
   schema: "jaldo.orchestration.config",
   contract: "1",
-  id: "protection-break-request",
+  id: "protection-responses",
   version: "1.0.0",
   vertical: "protection",
-  label: "JALDO Protection: customer break request (fictional configuration)",
+  label: "JALDO Protection: customer-requested break and operator-originated early-support review (fictional configuration)",
   dataStatus: "fictional",
   policies: [
     { id: "break-request-procedure", version: "2026.1", label: "Break request procedure (fictional)", source: "Fictional operator procedure" },
@@ -31,6 +34,9 @@ export const PROTECTION_CONFIGURATION = {
     { id: "marketing-permissions", version: "2026.1", label: "Marketing and communication permissions standard (fictional)", source: "Fictional operator standard" },
     { id: "support-contact-standard", version: "2026.1", label: "Support contact standard (fictional)", source: "Fictional operator standard" },
     { id: "customer-status-standard", version: "2026.1", label: "Customer status information standard (fictional)", source: "Fictional operator standard" },
+    { id: "early-support-review-procedure", version: "2026.1", label: "Early-support review procedure (fictional)", source: "Fictional operator procedure" },
+    { id: "message-delivery-standard", version: "2026.1", label: "In-app message delivery standard (fictional)", source: "Fictional operator standard" },
+    { id: "source-context-standard", version: "2026.1", label: "Upstream source context standard (fictional)", source: "Fictional operator standard" },
   ],
   roles: [
     {
@@ -40,6 +46,7 @@ export const PROTECTION_CONFIGURATION = {
     },
     { id: "protection-operations", label: "Protection Operations (records system availability)", operations: ["record-capacity"] },
     { id: "execution-reconciler", label: "Execution reconciler (purpose-scoped; never the request holder)", operations: ["reconcile-execution"] },
+    { id: "signal-intake", label: "Upstream signal intake (admits a permitted event; holds no approval and cannot hold a request)", operations: ["prepare"] },
     { id: "support-agent", label: "Support agent (acts only on a handover sent to the support team)", operations: [] },
     { id: "marketing-operator", label: "Marketing operator (acts only on a suppression sent to the marketing system)", operations: [] },
   ],
@@ -50,13 +57,22 @@ export const PROTECTION_CONFIGURATION = {
     { key: "marketing-suppression", label: "Marketing suppression system (simulated)", kind: "service", attestation: "forbidden" },
     { key: "marketing-suppression-manual", label: "Manual marketing desk (simulated)", kind: "service", attestation: "forbidden" },
     { key: "support-team", label: "Support team (simulated)", kind: "unit", attestation: "forbidden" },
+    { key: "upstream-source", label: "Upstream protection source (simulated)", kind: "service", attestation: "forbidden" },
+    { key: "in-app-channel", label: "In-app message channel (simulated)", kind: "service", attestation: "forbidden" },
   ],
   events: [
     {
       type: "customer.break-requested",
       purpose: "customer-break",
       maxClassification: "personal",
-      context: ["who", "ask", "duration", "contact", "note"],
+      context: ["who", "ask", "duration", "contact", "note", "origin", "source", "reference", "basis", "freshness"],
+      effect: "open-request",
+    },
+    {
+      type: "protection.review-requested",
+      purpose: "early-support-review",
+      maxClassification: "personal",
+      context: ["who", "ask", "duration", "contact", "note", "origin", "source", "reference", "basis", "freshness"],
       effect: "open-request",
     },
     { type: "connector.capacity-changed", purpose: "connector-capacity", maxClassification: "internal", context: ["party", "status"], effect: "capacity-change" },
@@ -68,6 +84,11 @@ export const PROTECTION_CONFIGURATION = {
       { id: "duration", label: "Length of break" },
       { id: "contact", label: "Contact choice" },
       { id: "note", label: "In the customer's own words" },
+      { id: "origin", label: "Where this came from" },
+      { id: "source", label: "Source" },
+      { id: "reference", label: "Source reference" },
+      { id: "basis", label: "Basis supplied by the source" },
+      { id: "freshness", label: "Source context" },
     ],
   },
   actions: [
@@ -353,6 +374,57 @@ export const PROTECTION_CONFIGURATION = {
       standingAuthority: false,
       evidenceRequired: ["approval.recorded", "disclosure.made"],
     },
+    {
+      id: "early-support-checkin",
+      ref: "IAM",
+      label: "Send one optional, supportive in-app check-in invitation",
+      short: "In-app message",
+      purpose: "Ask the in-app channel to deliver one fixed in-app message to the customer reference below.",
+      policy: "message-delivery-standard",
+      recipient: "in-app-channel",
+      approver: "holder",
+      confirmer: "holder",
+      authority: {
+        label: "In-app message delivery standard: a fixed message approved by a named person",
+        text: "A named reviewer decides, after checking the recipient, purpose, exact fields and authority. It is optional outreach and needs current context and the customer's current contact choice; both are checked again when it is sent. It changes nothing on the customer's account and attaches no label to the customer.",
+      },
+      fields: [
+        { id: "customer", label: "Customer", source: { requestField: "who" } },
+        { id: "template", label: "Template", source: { fixed: "Fixed in-app message template T-1 (fictional)" } },
+        { id: "text", label: "Message wording", source: { fixed: "We are getting in touch to let you know that support is available if you would ever like it. There is nothing you need to do. You can look at the support information, or tell us you would rather not get messages like this. If you ever want a break, you can ask for one yourself. Nothing on your account changes unless you ask. (Fictional example)" } },
+      ],
+      withheld: ["The source and its reference", "The source's reason code and freshness", "The customer's contact record", "Any account, marketing or other protection"],
+      proposableWhen: "always",
+      outcomes: [],
+      prerequisites: [],
+      standingAuthority: false,
+      evidenceRequired: ["approval.recorded", "disclosure.made", "acceptance.recorded", "completion.recorded", "confirmation.recorded"],
+    },
+    {
+      id: "context-clarification-request",
+      ref: "CLR",
+      label: "Ask the upstream source to resupply current context",
+      short: "Context clarification request",
+      purpose: "Ask the upstream source to resupply current, usable context for this review request. It does not update this review: a refresh needs a new coordination.",
+      policy: "source-context-standard",
+      recipient: "upstream-source",
+      approver: "holder",
+      confirmer: "none",
+      authority: {
+        label: "Upstream source context standard: ask for clarification rather than assume",
+        text: "Missing or stale context is not treated as a finding about the customer. The source is asked, by reference only, to resupply it.",
+      },
+      fields: [
+        { id: "reference", label: "Source reference", source: { requestField: "reference" } },
+        { id: "ask", label: "Request", source: { fixed: "Please resupply current, usable context for this review request. (Fictional example)" } },
+      ],
+      withheld: ["The customer's reference", "The customer's contact record", "Any decision already taken"],
+      proposableWhen: "always",
+      outcomes: [],
+      prerequisites: [],
+      standingAuthority: false,
+      evidenceRequired: ["approval.recorded", "disclosure.made", "acceptance.recorded", "completion.recorded"],
+    },
   ],
   communications: [
     {
@@ -422,6 +494,18 @@ export const PROTECTION_CONFIGURATION = {
       justification: "Fictional operator expectation.",
     },
     {
+      actionType: "early-support-checkin",
+      days: 1,
+      label: "The in-app channel is expected to take responsibility for an authorised check-in within one day.",
+      justification: "Fictional operator expectation. The kernel's smallest configurable unit is one day.",
+    },
+    {
+      actionType: "context-clarification-request",
+      days: 2,
+      label: "The upstream source is expected to take responsibility for a clarification request within two days.",
+      justification: "Fictional operator expectation.",
+    },
+    {
       actionType: "account-break-manual",
       days: 1,
       label: "The manual desk is expected to take responsibility for an authorised break within one day.",
@@ -439,7 +523,7 @@ export const PROTECTION_CONFIGURATION = {
         fact: "{recipient} accepted {short} ({ref}) and is now recorded as unable to act.",
         why: "A manual desk can apply the account break, with a fresh approval from a person.",
         noPathway: { title: "The system accepted the work, then could no longer act, and no other pathway is configured", why: "No eligible pathway is configured for this step. A person decides what happens next." },
-        whoDecides: "The protection reviewer may propose the recovery; only a person with approval authority approves it.",
+        whoDecides: "The protection reviewer decides what happens next. Where a pathway is configured they may propose it, and only a person with approval authority approves it.",
         unknowns: ["Whether the system will become available again", "Whether any part of the control was applied before the interruption"],
         alternatives: [
           { label: "Reusing the earlier approval", why: "A recovery is a different disclosure to a different recipient and needs its own approval." },
@@ -452,7 +536,7 @@ export const PROTECTION_CONFIGURATION = {
         fact: "{recipient} became unable to act before accepting {short} ({ref}).",
         why: "A manual desk can apply the account break, with a fresh approval from a person.",
         noPathway: { title: "The system could not take the work, and no other pathway is configured", why: "No eligible pathway is configured for this step. A person decides what happens next." },
-        whoDecides: "The protection reviewer may propose the recovery; only a person with approval authority approves it.",
+        whoDecides: "The protection reviewer decides what happens next. Where a pathway is configured they may propose it, and only a person with approval authority approves it.",
         unknowns: ["Whether the system will become available again"],
         alternatives: [{ label: "Waiting without a decision", why: "The customer's request stays unresolved while nobody can act." }],
         guidance: [{ text: "Keep the customer informed from approved facts only.", source: "Customer status information standard (fictional) 2026.1" }],

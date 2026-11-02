@@ -406,6 +406,221 @@ try {
     await ctx.close();
   }
 
+  // ───────────────────────── P2: operator-originated early-support review ─────────────────────────
+  const p2 = async (variant, width = DESKTOP) => {
+    const ctx = await browser.newContext({ viewport: width });
+    const page = await ctx.newPage();
+    await open(page, "simulation");
+    await page.getByRole("radio", { name: /Operator-originated early-support review/ }).check();
+    await page.getByRole("radio", { name: new RegExp(variant) }).check();
+    return { ctx, page };
+  };
+  const admit = async (page) => {
+    await click(page, "Admit the simulated review event");
+    await open(page, "operator");
+    await reviewed(page, page, "Take responsibility for this request");
+  };
+  const ops = (page, name) => card(page, name);
+  const CHECKIN = "In-app message IAM-1";
+
+  {
+    console.log("\nP2: current context, the full path");
+    const { ctx, page } = await p2("Current context, contact permitted");
+    await shot(page, "30-p2-simulation-selector-1440");
+    ok(await page.getByTestId("scenario-picker").isVisible(), "the scenario selector is shown in Simulation controls");
+    // selecting creates nothing: operator queue is empty, customer sees nothing
+    await open(page, "operator");
+    ok((await body(page)).includes("No review requests are waiting"), "selecting a scenario creates no record");
+    await open(page, "customer/today");
+    ok(!/review|signal|SRC-9001|Upstream/i.test(await page.getByTestId("customer-app").innerText()), "the customer sees nothing before the event is admitted");
+    await open(page, "simulation");
+    await click(page, "Admit the simulated review event");
+    ok(await page.getByRole("radio", { name: /Customer-requested break/ }).isDisabled(), "the other scenario is locked once records exist");
+    await open(page, "customer/today");
+    ok(!/review|signal|SRC-9001|Upstream|C-2087|R-14/i.test(await page.getByTestId("customer-app").innerText()), "admitting the event discloses nothing to the customer");
+    await shot(page, "34-p2-customer-before-release-390", false);
+    await open(page, "operator");
+    await reviewed(page, page, "Take responsibility for this request");
+    const rc = page.getByTestId("review-card");
+    ok(await rc.isVisible(), "the 'Why this needs review' card opens the workspace");
+    const t = await rc.innerText();
+    ok(/Simulated source/.test(t) && /SRC-9001/.test(t) && /What is not known/.test(t) && /not evidence that harm or wrongdoing occurred/.test(t) && /Who decides/.test(t) && /What would be shared/.test(t), "the card shows source, limits, knowns and unknowns, who decides and what is shared");
+    ok(!/risk score|rating|vulnerab/i.test(t), "the card scores and labels nobody");
+    await shot(page, "31-p2-operator-review-1440");
+    await page.getByRole("button", { name: "Prepare the early-support check-in" }).click();
+    const esc = card(page, CHECKIN);
+    ok((await esc.getAttribute("data-stage")) === "proposed", "the check-in is prepared as a proposal, not approved or sent");
+    ok((await page.getByRole("button", { name: /Send to/ }).count()) === 0, "nothing can be sent yet");
+    await esc.getByRole("button", { name: "Put forward for approval" }).click();
+    ok(await esc.getByRole("button", { name: "Record decision: do not proceed" }).isVisible(), "a recorded 'do not proceed' decision is offered");
+    await reviewed(page, esc, "Approve: In-app message");
+    ok((await esc.innerText()).includes("Authorised by"), "a named person is recorded as the authoriser");
+    await esc.getByRole("button", { name: /Send to/ }).click();
+    await shot(page, "32-p2-operator-checkin-sent-1440");
+    await open(page, "customer/today");
+    ok(!/message from the team|support is available/i.test(await page.getByTestId("customer-app").innerText()), "an authorised, sent message is still not visible to the customer");
+    await open(page, "operations");
+    const oe = card(page, CHECKIN);
+    const ot = await oe.innerText();
+    ok(!/R-14|Reason code|Contact choice|Updates in the app|support is available|Source context/.test(await body(page)), "Operations sees no context, contact record or invitation text");
+    for (const expect of ["acknowledged", "acknowledged", "applied"]) { await oe.getByRole("button", { name: /Simulate:/ }).click(); ok((await oe.getAttribute("data-stage")) === expect, `the channel advances to ${expect}`); }
+    await shot(page, "33-p2-operations-delivery-1440");
+    await open(page, "customer/today");
+    ok((await page.getByTestId("invitation").count()) === 1, "the invitation appears once the channel reports it delivered");
+    ok(!/risk|vulnerab|bonus|reward/i.test(await page.getByTestId("invitation").innerText()), "the invitation is supportive and non-promotional");
+    await open(page, "operations");
+    await card(page, CHECKIN).getByRole("button", { name: "Run simulated read-back" }).click();
+    await open(page, "operator");
+    await card(page, CHECKIN).getByRole("button", { name: "Record confirmation" }).click();
+    ok((await card(page, CHECKIN).getAttribute("data-stage")) === "confirmed", "confirmation is recorded after the simulated read-back");
+    await page.setViewportSize(MOBILE);
+    await open(page, "customer/today");
+    await shot(page, "35-p2-customer-invitation-390");
+    await axeRun(page, "customer/today [P2 invitation, 390]");
+    await page.getByRole("button", { name: /No thanks: no more optional support messages/ }).click();
+    ok(await page.getByTestId("opted-out").isVisible(), "a decline is recorded as the customer's choice, with no penalty");
+    ok(await page.getByTestId("invitation").isVisible(), "the message is not taken back");
+    await shot(page, "36-p2-customer-declined-390");
+    await open(page, "customer/options");
+    ok(/separate request/.test(await body(page)), "a later break is shown as a separate request, not started from the message");
+    await open(page, "customer/support");
+    ok(await page.getByRole("radio", { name: /Updates in the app only/ }).isChecked(), "Support shows the customer's current contact choice");
+    await page.setViewportSize(DESKTOP);
+    for (const r of ["operator", "operations", "guide", "simulation"]) { await open(page, r); await axeRun(page, `${r} [P2]`); }
+    // reset returns to the customer-requested scenario with nothing carried over
+    await open(page, "simulation");
+    await page.getByRole("button", { name: "Reset to choose another scenario" }).first().click();
+    ok(await page.getByRole("radio", { name: /Customer-requested break/ }).isChecked(), "reset returns to the customer-requested scenario");
+    await open(page, "customer/today");
+    ok(!/message from the team|SRC-9001|C-2087/.test(await body(page)), "nothing from the early-support scenario leaks after reset");
+    await open(page, "operator");
+    ok((await body(page)).includes("No requests are waiting"), "the operator queue is empty after reset");
+    await ctx.close();
+  }
+  {
+    console.log("\nP2: missing context");
+    const { ctx, page } = await p2("Missing source context");
+    await admit(page);
+    const rc = page.getByTestId("review-card");
+    ok((await rc.getAttribute("data-context")) === "missing" && /Missing/.test(await rc.innerText()), "the card states the context is missing");
+    ok(await page.getByRole("button", { name: "Prepare the early-support check-in" }).isDisabled(), "the discretionary check-in is blocked");
+    ok(/Existing protections|Nothing existing is removed/.test(await rc.innerText()), "the card says existing protections are unchanged");
+    ok(/Unavailable/.test(await rc.innerText()), "a review-level no-action decision is shown as unavailable, with its dependency");
+    await shot(page, "37-p2-operator-missing-context-1440");
+    await page.getByRole("button", { name: "Request clarification from the source" }).click();
+    const clr = card(page, "Context clarification request CLR-1");
+    await clr.getByRole("button", { name: "Put forward for approval" }).click();
+    await reviewed(page, clr, "Approve: Context clarification request");
+    await clr.getByRole("button", { name: /Send to/ }).click();
+    await open(page, "operations");
+    const oc = card(page, "Context clarification request CLR-1");
+    for (let i = 0; i < 3; i++) await oc.getByRole("button", { name: /Simulate:/ }).click();
+    ok((await oc.getAttribute("data-stage")) === "applied", "the clarification request is applied: sent, received, accepted, reported done");
+    ok(!(await oc.innerText()).includes("Run simulated read-back"), "no confirmation is invented for a clarification");
+    await open(page, "operator");
+    ok(await page.getByRole("button", { name: "Prepare the early-support check-in" }).isDisabled(), "completing a clarification does not refresh or unblock the review");
+    await axeRun(page, "operator [P2 missing context]");
+    await ctx.close();
+  }
+  {
+    console.log("\nP2: stale context");
+    const { ctx, page } = await p2("Stale source context");
+    await admit(page);
+    ok(/older than the configured limit/.test(await page.getByTestId("review-card").innerText()), "the card explains that the context is stale");
+    ok(await page.getByRole("button", { name: "Prepare the early-support check-in" }).isDisabled(), "the check-in is blocked for stale context");
+    await ctx.close();
+  }
+  {
+    console.log("\nP2: no optional-contact permission");
+    const { ctx, page } = await p2("No optional-contact permission on file");
+    await admit(page);
+    ok(await page.getByRole("button", { name: "Prepare the early-support check-in" }).isDisabled(), "the check-in is blocked without permission, although the context is current");
+    ok(/Fresh context does not create contact permission/.test(await page.getByTestId("review-card").innerText()), "the card says fresh context does not create permission");
+    await shot(page, "38-p2-operator-no-permission-1440");
+    await ctx.close();
+  }
+  {
+    console.log("\nP2: delivery refused");
+    const { ctx, page } = await p2("Delivery refused");
+    await admit(page);
+    await page.getByRole("button", { name: "Prepare the early-support check-in" }).click();
+    const esc = card(page, CHECKIN);
+    await esc.getByRole("button", { name: "Put forward for approval" }).click();
+    await reviewed(page, esc, "Approve: In-app message");
+    await esc.getByRole("button", { name: /Send to/ }).click();
+    ok((await esc.getAttribute("data-stage")) === "retry", "a refused attempt leaves 'Retry available — not sent'");
+    await esc.getByRole("button", { name: /Send again/ }).click();
+    ok((await esc.getAttribute("data-stage")) === "unresolved", "after the permitted attempts it is unresolved");
+    ok((await esc.getByRole("button", { name: /Send/ }).count()) === 0, "no further send is offered");
+    await open(page, "operations");
+    ok((await page.getByTestId("gaps").innerText()).includes("IAM-1"), "Operations lists the gap");
+    await shot(page, "39-p2-operations-delivery-failed-1440");
+    await open(page, "customer/today");
+    ok(!/message from the team/i.test(await body(page)), "the customer is not told anything");
+    await open(page, "operator");
+    await card(page, CHECKIN).getByRole("button", { name: /Re-check and propose again/ }).click();
+    ok((await card(page, CHECKIN).innerText()).includes("Not yet authorised by anyone"), "re-checking returns it to proposed with no approval carried over");
+    await shot(page, "40-p2-operator-recheck-1440");
+    await ctx.close();
+  }
+  {
+    console.log("\nP2: delivery outcome unknown");
+    const { ctx, page } = await p2("Delivery outcome unknown");
+    await admit(page);
+    await page.getByRole("button", { name: "Prepare the early-support check-in" }).click();
+    const esc = card(page, CHECKIN);
+    await esc.getByRole("button", { name: "Put forward for approval" }).click();
+    await reviewed(page, esc, "Approve: In-app message");
+    await esc.getByRole("button", { name: /Send to/ }).click();
+    ok((await esc.getAttribute("data-stage")) === "unresolved" && (await esc.getByRole("button", { name: /Send/ }).count()) === 0, "an unknown outcome is unresolved and cannot be retried");
+    await open(page, "operations");
+    const o = card(page, CHECKIN);
+    ok((await o.innerText()).includes("outcome of this send is unknown"), "Operations sees the unknown outcome");
+    await o.getByRole("textbox").fill("The receiving system's log shows the request arrived.");
+    await o.getByRole("button", { name: /Record: it was delivered/ }).click();
+    ok((await o.getAttribute("data-stage")) === "sent", "a separate reconciliation records it as Sent, not delivered to the customer");
+    await open(page, "customer/today");
+    ok(!/message from the team/i.test(await body(page)), "the customer still sees nothing");
+    await ctx.close();
+  }
+  {
+    console.log("\nP2: channel unavailable after accepting");
+    const { ctx, page } = await p2("Channel unavailable after accepting");
+    await admit(page);
+    await page.getByRole("button", { name: "Prepare the early-support check-in" }).click();
+    const esc = card(page, CHECKIN);
+    await esc.getByRole("button", { name: "Put forward for approval" }).click();
+    await reviewed(page, esc, "Approve: In-app message");
+    await esc.getByRole("button", { name: /Send to/ }).click();
+    await open(page, "operations");
+    const o = card(page, CHECKIN);
+    await o.getByRole("button", { name: /Simulate:/ }).click(); await o.getByRole("button", { name: /Simulate:/ }).click();
+    await page.locator("li.card", { hasText: "In-app message channel" }).getByRole("button", { name: "Record as unavailable" }).click();
+    ok((await o.getAttribute("data-stage")) === "unresolved", "accepted, then unavailable, is Unresolved");
+    await open(page, "operator");
+    const t = await body(page);
+    ok(/no other pathway is configured/.test(t), "the operator is told plainly that no permitted route is configured");
+    ok(!/someone is (working|handling)|actively/i.test(t), "no claim that anyone is handling it");
+    ok(!(await page.getByRole("button", { name: /Propose: / }).count()), "no alternative recipient or channel is offered");
+    await shot(page, "41-p2-operator-no-route-1440");
+    await ctx.close();
+  }
+  {
+    console.log("\nP2: enlarged text and 320px reflow");
+    const { ctx, page } = await p2("Current context, contact permitted", MOBILE);
+    await admit(page);
+    await page.getByRole("button", { name: "Prepare the early-support check-in" }).click();
+    await open(page, "operator");
+    await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+    ok((await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)) <= 0, "operator review card: no horizontal scroll at 200% text on 390px");
+    await shot(page, "42-p2-operator-review-200pc-390", false);
+    await page.reload();
+    await page.setViewportSize({ width: 320, height: 700 });
+    await open(page, "operator");
+    ok((await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)) <= 0, "operator review card reflows at 320px");
+    await ctx.close();
+  }
+
   // 5d. Enlarged text (200%) and 320px reflow
   {
     console.log("\nEnlarged text");

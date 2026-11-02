@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { REVIEWER } from "../sim/scope";
-import { operatorDo, operatorView, type OperatorAction, type OperatorView } from "../sim/views";
+import { operatorDo, operatorView, type OperatorAction, type OperatorView, type ReviewCard } from "../sim/views";
 import { Offers, StageLine, Track } from "./ActionCard";
 import { Btn, DefList, Empty, Panel, Result, useOutcome } from "./parts";
 import { useWorld } from "./world";
@@ -17,8 +17,17 @@ export function Operator() {
       <>
         <Viewpoint />
         <Panel title="Review queue" status="implemented">
-          <Empty>No requests are waiting. In this prototype a request arrives when the customer sends one from the Customer app.</Empty>
-          <p><a className="btn btn-primary" href="#/customer/options">Open the Customer app</a></p>
+          {v.scenario === "early-support" ? (
+            <>
+              <Empty>No review requests are waiting. In this scenario an upstream source sends one. The simulated source's event is admitted from Simulation controls; nothing exists until then.</Empty>
+              <p><a className="btn btn-primary" href="#/simulation">Open Simulation controls</a></p>
+            </>
+          ) : (
+            <>
+              <Empty>No requests are waiting. In this prototype a request arrives when the customer sends one from the Customer app.</Empty>
+              <p><a className="btn btn-primary" href="#/customer/options">Open the Customer app</a></p>
+            </>
+          )}
         </Panel>
         <Authority v={v} />
       </>
@@ -26,6 +35,7 @@ export function Operator() {
   }
 
   const groups: { id: OperatorAction["group"]; title: string; intro: string }[] = [
+    { id: "early-support", title: "Early-support actions", intro: "Optional and discretionary. Each is a separate decision for a named person. Nothing changes on the customer's account." },
     { id: "protection", title: "Protection actions", intro: "Each is a separate decision for a named person. Approving one does not approve another." },
     { id: "support", title: "Support coordination", intro: "Optional outreach. Needs the customer's CURRENT permission, checked again at every step and when sent. Whether to send it, and when, is your decision. Access to Support never depends on any of this." },
     { id: "customer-notice", title: "What the customer is told", intro: "A notice is approved only after its protection is confirmed. The customer sees nothing else about it." },
@@ -36,8 +46,8 @@ export function Operator() {
       <Viewpoint />
       <nav className="jump" aria-label="On this page">
         <ul>
-          {["request", "policies", "authority", "actions", "next", "record"].map((id) => (
-            <li key={id}><a href={`#${id}`} onClick={(e) => { e.preventDefault(); document.getElementById(id)?.scrollIntoView({ block: "start" }); document.getElementById(id)?.focus(); }}>{{ request: "Request", policies: "Policies", authority: "Authority", actions: "Actions", next: "Next", record: "Record" }[id]}</a></li>
+          {[...(v.review ? ["why"] : []), "request", "policies", "authority", "actions", "next", "record"].map((id) => (
+            <li key={id}><a href={`#${id}`} onClick={(e) => { e.preventDefault(); document.getElementById(id)?.scrollIntoView({ block: "start" }); document.getElementById(id)?.focus(); }}>{{ why: "Why review", request: "Request", policies: "Policies", authority: "Authority", actions: "Actions", next: "Next", record: "Record" }[id]}</a></li>
           ))}
         </ul>
       </nav>
@@ -45,11 +55,13 @@ export function Operator() {
       <Panel title="Review queue" status="implemented" id="queue">
         <ul className="queue">
           <li className="card">
-            <p><strong>{v.request!.ref}</strong> · Break request · {v.request!.fields.find((f) => f.label === "Length of break")?.value}</p>
+            <p><strong>{v.request!.ref}</strong> · {v.scenario === "early-support" ? "Early-support review request (from an upstream source)" : `Break request · ${v.request!.fields.find((f) => f.label === "Length of break")?.value}`}</p>
             <p className="muted">Received {v.request!.receivedAt} · {v.status === "awaiting_acceptance" ? "Waiting for a reviewer to take responsibility" : "Held by " + REVIEWER.label}</p>
           </li>
         </ul>
       </Panel>
+
+      {v.review ? <ReviewPanel r={v.review} /> : null}
 
       <Panel title="The request and where it came from" status="implemented" id="request" intro="Everything here is what the customer sent, as the kernel admitted it. Nothing is inferred.">
         <div tabIndex={-1} id="request-anchor" />
@@ -95,12 +107,13 @@ export function Operator() {
       {v.status === "owner_accepted" ? (
         <>
           <Panel title="Authorise specific protection actions" status="implemented" id="actions" intro="No action is approved in bulk, and none is approved by the system. Each needs its own four checks.">
-            {v.actions.length === 0 ? (
+            {v.actions.length === 0 && v.scenario !== "early-support" ? (
               <>
                 <Empty>No actions have been prepared yet.</Empty>
                 <Offers offers={v.offers} onRun={(k) => run(k)} />
               </>
             ) : null}
+            {v.actions.length === 0 && v.scenario === "early-support" ? <Empty>Nothing has been prepared, approved or sent. Use the decisions above.</Empty> : null}
             {v.corrections.map((c) => (
               <section key={c.actionId} className="card attention" aria-label={`Not confirmed: ${c.protection}`} data-testid="correction">
                 <h3>Reported applied, but not confirmed: {c.protection}</h3>
@@ -119,7 +132,7 @@ export function Operator() {
             ))}
             {groups.map((g) => {
               const acts = v.actions.filter((a) => a.group === g.id);
-              if (acts.length === 0 && !(g.id === "support" && v.offers.some((o) => o.key === "propose:support-handover"))) return null;
+              if (acts.length === 0 && !(g.id === "support" && v.offers.some((o) => o.key === "propose:support-handover")) && !(g.id === "early-support" && v.offers.some((o) => o.key.startsWith("propose:early") || o.key.startsWith("propose:context")))) return null;
               return (
                 <section key={g.id} aria-label={g.title} className="group">
                   <h3>{g.title}</h3>
@@ -128,6 +141,7 @@ export function Operator() {
                     <ActionCard key={a.id} a={a} run={run} />
                   ))}
                   {g.id === "support" ? <Offers offers={v.offers.filter((o) => o.key.startsWith("propose:support"))} onRun={(k) => run(k)} /> : null}
+                  {g.id === "early-support" ? <Offers offers={v.offers.filter((o) => o.key === "propose:early-support-checkin" || o.key === "propose:context-clarification-request")} onRun={(k) => run(k)} /> : null}
                   {g.id === "customer-notice" ? <Offers offers={v.offers.filter((o) => o.key.startsWith("propose:customer"))} onRun={(k) => run(k)} /> : null}
                 </section>
               );
@@ -180,6 +194,48 @@ export function Operator() {
       <div className="toast-space" aria-hidden="true" />
       {outcome ? <div className="toast"><Result outcome={outcome} /></div> : <Result outcome={null} />}
     </>
+  );
+}
+
+function ReviewPanel({ r }: { r: ReviewCard }) {
+  return (
+    <section className="panel review-card" id="why" aria-labelledby="why-h" tabIndex={-1} data-testid="review-card" data-context={r.context.state}>
+      <header className="panel-head">
+        <h2 id="why-h">{r.title}</h2>
+        <span className="chip chip-simulation" data-status="simulation"><span aria-hidden="true" className="chip-mark">◐</span>Simulated source</span>
+      </header>
+      <p className="lede-small"><strong>What was received.</strong> {r.received}</p>
+      <div className="two">
+        <div>
+          <h3>Where it came from</h3>
+          <DefList rows={[["Source", r.source.name], ["Reference", r.source.reference], ["Event time", r.source.eventTime], ["Provenance", r.source.simulated]]} />
+          <h3>Source context</h3>
+          <p className={`ctx ctx-${r.context.state}`}><span aria-hidden="true">{r.context.state === "current" ? "✔" : "!"}</span> <strong>{r.context.label}.</strong> {r.context.text}</p>
+          <h3>Known limits of this source</h3>
+          <ul className="list">{r.limitations.map((l) => <li key={l}>{l}</li>)}</ul>
+        </div>
+        <div>
+          <h3>What is known (permitted facts only)</h3>
+          <DefList rows={r.permitted.map((p) => [p.label, p.value] as const)} />
+          <h3>What is not known</h3>
+          <ul className="list">{r.unknowns.map((u) => <li key={u}>{u}</li>)}</ul>
+          <h3>Policy</h3>
+          <ul className="list">{r.policy.map((p) => <li key={p.label}>{p.label} <span className="muted">v{p.version}</span></li>)}</ul>
+        </div>
+      </div>
+      <h3>What you can decide</h3>
+      <ul className="decisions">
+        {r.decisions.map((d) => (
+          <li key={d.what} data-status={d.status}>
+            <span className={`result result-${d.status === "available" ? "met" : "needs-attention"}`}><span aria-hidden="true">{d.status === "available" ? "✔" : d.status === "blocked" ? "!" : "–"}</span> {d.status === "available" ? "Available" : d.status === "blocked" ? "Blocked" : "Unavailable"}</span>
+            <span><strong>{d.what}.</strong>{d.why ? <> <span className="muted">{d.why}</span></> : null}</span>
+          </li>
+        ))}
+      </ul>
+      <DefList rows={[["Who decides", r.whoDecides], ["What would be shared", r.willShare], ["Existing protections", r.protections]]} />
+      <h3>What remains outstanding</h3>
+      <ul className="list">{r.outstanding.length ? r.outstanding.map((o) => <li key={o}>{o}</li>) : <li>Nothing outstanding.</li>}</ul>
+    </section>
   );
 }
 

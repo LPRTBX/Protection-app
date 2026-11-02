@@ -5,7 +5,7 @@ import type { Executor } from "@workspace/jaldo-orchestration";
  * a marketing platform or a notification service. They only decide, from a scripted behaviour, what an injected executor
  * returns and what each system's own channel does next. The kernel decides everything else.
  */
-export const CONNECTOR_KEYS = ["account-controls", "account-controls-manual", "marketing-suppression", "marketing-suppression-manual", "support-team"] as const;
+export const CONNECTOR_KEYS = ["account-controls", "account-controls-manual", "marketing-suppression", "marketing-suppression-manual", "support-team", "upstream-source", "in-app-channel"] as const;
 export type ConnectorKey = (typeof CONNECTOR_KEYS)[number];
 
 export const BEHAVIOURS = ["applies", "refuses", "times-out", "no-acknowledgement"] as const;
@@ -37,6 +37,8 @@ export const defaultScripts = (): Record<ConnectorKey, ConnectorScript> => ({
   "marketing-suppression": { behaviour: "applies", reachedAnyway: true, readBack: "matches" },
   "marketing-suppression-manual": { behaviour: "applies", reachedAnyway: true, readBack: "matches" },
   "support-team": { behaviour: "applies", reachedAnyway: true, readBack: "matches" },
+  "upstream-source": { behaviour: "applies", reachedAnyway: true, readBack: "matches" },
+  "in-app-channel": { behaviour: "applies", reachedAnyway: true, readBack: "matches" },
 });
 
 export const PRESETS = [
@@ -94,3 +96,16 @@ export function makeExecutor(scripts: Record<ConnectorKey, ConnectorScript>, onU
     return { status: "delivered", reference: `SIM-${request.key.replace("#", "-")}` };
   };
 }
+
+/** P2 presets: a variant (set before the event is admitted) plus scripted behaviour of the in-app channel. */
+export const P2_PRESETS = [
+  { id: "p2-current", label: "Current context, contact permitted", detail: "Full path: review, check-in, delivery, confirmation.", variant: { context: "current", contact: "permitted" }, scripts: {} },
+  { id: "p2-missing", label: "Missing source context", detail: "The source supplied nothing usable. The check-in is blocked; clarification can be requested.", variant: { context: "missing", contact: "permitted" }, scripts: {} },
+  { id: "p2-stale", label: "Stale source context", detail: "The source's context is older than the configured limit. The check-in is blocked.", variant: { context: "stale", contact: "permitted" }, scripts: {} },
+  { id: "p2-no-permission", label: "No optional-contact permission on file", detail: "Context is current but the contact choice on file does not permit optional outreach.", variant: { context: "current", contact: "not-permitted" }, scripts: {} },
+  { id: "p2-refused", label: "Delivery refused", detail: "The in-app channel refuses every attempt (a known failure).", variant: { context: "current", contact: "permitted" }, scripts: { "in-app-channel": { behaviour: "refuses" } } },
+  { id: "p2-unknown", label: "Delivery outcome unknown", detail: "The in-app channel times out. Whether it arrived is only known from its own log.", variant: { context: "current", contact: "permitted" }, scripts: { "in-app-channel": { behaviour: "times-out", reachedAnyway: true } } },
+  { id: "p2-unaccepted", label: "Approved but never accepted", detail: "The in-app channel receives it and never accepts it.", variant: { context: "current", contact: "permitted" }, scripts: { "in-app-channel": { behaviour: "no-acknowledgement" } } },
+  { id: "p2-unavailable", label: "Channel unavailable after accepting", detail: "Everything works until Protection Operations records the in-app channel as unavailable after it accepted.", variant: { context: "current", contact: "permitted" }, scripts: {} },
+] as const satisfies readonly { id: string; label: string; detail: string; variant: { context: string; contact: string }; scripts: Partial<Record<ConnectorKey, Partial<ConnectorScript>>> }[];
+export type P2PresetId = (typeof P2_PRESETS)[number]["id"];
