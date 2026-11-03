@@ -8,7 +8,7 @@ router = "path"
 
 [[services]]
 name = "web"
-paths = [ "/protection-app/" ]
+paths = [ "/protection-app/", "/" ]
 localPort = 21166
 
 [services.development]
