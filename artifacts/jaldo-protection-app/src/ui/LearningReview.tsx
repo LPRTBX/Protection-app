@@ -254,7 +254,7 @@ export function LearningReview() {
           <legend>Choose a separate demonstration view</legend>
           <label>
             <input type="radio" name="learning-projection" value="internal" checked={projection === "internal"} onChange={() => setProjection("internal")} />
-            <span><strong>Restricted internal learning</strong><small>Governance, evidence and policy simulation</small></span>
+            <span><strong>Operator learning demonstration</strong><small>Fictional governance, evidence and policy simulation</small></span>
           </label>
           <label>
             <input type="radio" name="learning-projection" value="customer" checked={projection === "customer"} onChange={() => setProjection("customer")} />
@@ -270,9 +270,10 @@ export function LearningReview() {
           </div>
           <StatusChip status="simulation" />
         </div>
+        <p className="lr-privacy"><strong>Demonstration boundary:</strong> this fictional operator learning view is not a production access-control boundary.</p>
         <dl className="lr-grid">
           <div className="lr-fact"><dt>Active for future runs</dt><dd>Policy V{activeVersion}{activeVersion === 1 && rolledBack ? " · rolled back" : ""}</dd></div>
-          <div className="lr-fact"><dt>Run history</dt><dd>{history.length} fictional run{history.length === 1 ? "" : "s"} · append-only in this component</dd></div>
+          <div className="lr-fact"><dt>Run history</dt><dd>{history.length} fictional run{history.length === 1 ? "" : "s"} · append-only; rollback affects future runs only</dd></div>
         </dl>
         <div className="lr-actions">
           <Btn tone="primary" onClick={replayRun} disabled={!canRunCurrentVersion}>
@@ -444,6 +445,7 @@ export function LearningReview() {
           {latestRun ? (
             <dl className="lr-grid">
               <div className="lr-fact"><dt>Authorized execution</dt><dd>Fictional summary delivered {displayTime(latestRun.summaryDeliveredAt)}; delivery read-back recorded {displayTime(latestRun.summaryVerifiedAt)}.</dd></div>
+              <div className="lr-fact"><dt>Simulation outcome check</dt><dd>Scripted read-back confirms simulated execution only. It does not show that the action helped or reduced harm.</dd></div>
               <div className="lr-fact"><dt>Effect on customer</dt><dd>Unknown / unmeasured. Delivery confirmation is not an outcome measure.</dd></div>
             </dl>
           ) : <p className="empty">Execution appears after a fictional run is replayed.</p>}
@@ -509,10 +511,10 @@ export function LearningReview() {
         </div>
 
         <div className="lr-section lr-privacy">
-          <h3>Restricted learning record and customer-visible summary</h3>
-          <p><strong>Restricted internal learning:</strong> policy version, scripted timeline, review decision, unresolved receiving-system evidence and human governance record stay in this internal simulation view.</p>
+          <h3>Fictional operator learning and customer-visible summary</h3>
+          <p><strong>Operator learning demonstration:</strong> policy version, scripted timeline, review decision, unresolved receiving-system evidence and human governance record appear in this fictional demonstration view.</p>
           <p><strong>Customer-visible:</strong> only the separately authorized support summary and its confirmed delivery status are represented. Internal rule details, alert rationale and reviewer discussion are not included in that customer-facing summary.</p>
-          <p className="muted">These are separate demonstration projections, not production access controls. Everything is fictional and local to this browser simulation; no customer, receiving system, marketing platform or protection service is contacted.</p>
+          <p className="muted">These are separate fictional demonstration projections, not a production access-control boundary. Everything is local to this browser simulation; no real customer, receiving system, marketing platform or protection service is contacted.</p>
         </div>
           </>
         ) : (

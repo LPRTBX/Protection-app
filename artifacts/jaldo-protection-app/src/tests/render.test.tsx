@@ -72,6 +72,15 @@ describe("Rendered structure", () => {
     assert.match(t, /not connected to a live/i);
     assert.equal(/\bis connected to (a )?live/i.test(t), false);
   });
+
+  it("labels operator learning as a fictional demonstration, not a production access boundary", () => {
+    const t = text(html(new ProtectionWorld(), "guide"));
+    assert.match(t, /Operator learning demonstration/);
+    assert.match(t, /not a production access-control boundary/);
+    assert.doesNotMatch(t, /Restricted internal learning/);
+    assert.match(t, /same app, kernel and three role views/);
+    assert.match(t, /Customer-visible:.*Internal rule details, alert rationale and reviewer discussion are not included/);
+  });
 });
 
 describe("Static boundaries", () => {

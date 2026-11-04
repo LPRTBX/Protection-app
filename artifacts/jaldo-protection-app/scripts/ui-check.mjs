@@ -25,6 +25,8 @@ const SHOTS = process.env.SHOTS_DIR ? path.resolve(here, "..", "..", "..", proce
 if (SHOTS) mkdirSync(SHOTS, { recursive: true });
 
 const failures = [];
+const browserIssues = [];
+const observedPages = new WeakSet();
 const ok = (c, m) => { if (!c) { failures.push(m); console.log("  FAIL", m); } else console.log("  ok  ", m); };
 const server = spawn("pnpm", ["exec", "vite", "preview", "--config", "vite.config.ts", "--port", String(PORT)], { cwd: path.join(here, ".."), stdio: "ignore", env: { ...process.env, PORT: String(PORT) } });
 process.on("exit", () => { try { server.kill("SIGTERM"); } catch { /* stopped */ } });
@@ -43,7 +45,13 @@ async function axeRun(page, label) {
 }
 const shot = async (page, name, full = true) => { if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `${name}.png`), fullPage: full }); };
 const body = (page) => page.locator("body").innerText();
-const open = async (page, r) => { await page.goto(`${BASE}#/${r}`); await page.waitForSelector("h1"); };
+const observePage = (page) => {
+  if (observedPages.has(page)) return;
+  observedPages.add(page);
+  page.on("console", (message) => { if (message.type() === "error") browserIssues.push(`console: ${message.text()}`); });
+  page.on("pageerror", (error) => browserIssues.push(`page error: ${error.message}`));
+};
+const open = async (page, r) => { observePage(page); await page.goto(`${BASE}#/${r}`); await page.waitForSelector("h1"); };
 const click = (page, name, opts = {}) => page.getByRole("button", { name, ...opts }).click();
 const checkAll = async (scope) => { for (const cb of await scope.getByRole("checkbox").all()) await cb.check(); };
 
@@ -118,6 +126,62 @@ try {
     await page.waitForSelector("[data-testid=headline]");
     ok(await page.evaluate(() => document.activeElement?.id === "screen-title"), "after sending, focus moves to the new screen's title");
     ok((await body(page)).includes("Request received"), "the request is sent by keyboard alone");
+    await ctx.close();
+  }
+
+  // 3a. Fictional, governed learning lifecycle and separate customer projection
+  {
+    const ctx = await browser.newContext({ viewport: MOBILE });
+    const page = await ctx.newPage();
+    console.log("\nGoverned learning");
+    await open(page, "guide");
+    const learning = page.locator("#learning-review");
+    const scenarioPicker = page.getByTestId("scenario-picker");
+    ok(await scenarioPicker.getByRole("radio").count() === 2, "the existing two scenarios remain; no high-risk scenario is added");
+    ok(await learning.getByText("not a production access-control boundary").first().isVisible(), "operator learning is labelled as a demonstration, not a production access boundary");
+    const evidenceRegion = learning.getByRole("region", { name: /Fictional evidence timestamps/ });
+    await evidenceRegion.focus();
+    ok(await evidenceRegion.evaluate((el) => document.activeElement === el), "the wide evidence table can be reached by keyboard");
+
+    await click(page, "Run first V1 occurrence");
+    ok((await learning.innerText()).includes("Run 1 · first occurrence"), "the first fixed fictional sequence is recorded under V1");
+    ok((await learning.innerText()).includes("Unknown / unmeasured"), "the customer effect remains explicitly unknown");
+    ok((await learning.innerText()).includes("does not show that the action helped or reduced harm"), "execution verification does not claim benefit");
+
+    await click(page, "Propose V2 after first V1 run");
+    ok(await learning.getByRole("button", { name: "Activate V2 for simulation only" }).isDisabled(), "activation is unavailable before the dry run and authorized approval");
+    await click(page, "Test proposal as dry run");
+    ok((await learning.innerText()).includes("V1 review:") && (await learning.innerText()).includes("V2 review:"), "the dry run compares the same scripted sequence before and after");
+    const approval = learning.locator("fieldset.lr-checks").first();
+    await checkAll(approval);
+    await click(page, "Record human reviewer approval");
+    ok((await learning.innerText()).includes("Approved, not yet active"), "authorised approval remains distinct from activation");
+    await click(page, "Activate V2 for simulation only");
+    ok((await learning.locator(".lr-fact").first().innerText()).includes("Policy V2"), "the versioned simulation is activated only after approval");
+    await click(page, "Replay fixed sequence with V2");
+    ok((await learning.innerText()).includes("Run 2 · fresh replay") && (await learning.innerText()).includes("Policy V2"), "V2 replays the fixed sequence and records a separate result");
+
+    await click(page, "Attempt duplicate event/action replay");
+    ok((await learning.innerText()).includes("Replay rejected; no duplicate was added."), "duplicate replay is refused without changing history");
+    await click(page, "Rollback future runs to V1");
+    ok((await learning.locator(".lr-fact").first().innerText()).includes("Policy V1 · rolled back"), "rollback changes only the version used for future runs");
+    ok((await learning.innerText()).includes("Run 1 · first occurrence") && (await learning.innerText()).includes("Run 2 · fresh replay"), "rollback leaves prior run history intact");
+    await click(page, "Replay fixed sequence with V1");
+    ok((await learning.innerText()).includes("Run 3 · after rollback"), "a later run uses the rolled-back version without rewriting prior runs");
+
+    await learning.getByRole("radio", { name: /Withdraw the proposal/ }).check();
+    await click(page, "Record selected human alternative");
+    ok((await learning.innerText()).includes("Recorded: withdraw proposal"), "an inconclusive alert can be withdrawn by a human");
+    await learning.getByRole("radio", { name: /Refine for later review/ }).check();
+    await click(page, "Record selected human alternative");
+    ok((await learning.innerText()).includes("Recorded: refine for later human review"), "an inconclusive alert can instead be refined for later human review");
+
+    await learning.getByRole("radio", { name: /Customer summary preview/ }).check();
+    const customerSummary = await learning.innerText();
+    ok(customerSummary.includes("Customer-facing summary preview"), "the customer summary projection is available");
+    ok(!/Active for future runs|Policy V[12]|Run history|Fictional evidence timestamps|inconclusive alert/i.test(customerSummary), "the customer summary omits internal learning details");
+    await learning.getByRole("radio", { name: /Operator learning demonstration/ }).check();
+    ok((await learning.innerText()).includes("Run 3 · after rollback"), "operator learning history remains available in its separate demonstration view");
     await ctx.close();
   }
 
@@ -626,7 +690,7 @@ try {
     console.log("\nEnlarged text");
     const ctx = await browser.newContext({ viewport: MOBILE });
     const page = await ctx.newPage();
-    for (const r of ["customer/today", "customer/options", "customer/support", "operator", "operations"]) {
+    for (const r of ["customer/today", "customer/options", "customer/support", "operator", "operations", "guide"]) {
       await open(page, r);
       await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
       const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -637,7 +701,7 @@ try {
     await shot(page, "26-customer-today-200pc-390", false);
     await page.setViewportSize({ width: 320, height: 700 });
     await page.reload();
-    for (const r of ["customer/today", "operator"]) { await open(page, r); ok((await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)) <= 0, `${r}: reflows at 320px`); }
+    for (const r of ["customer/today", "operator", "guide"]) { await open(page, r); ok((await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)) <= 0, `${r}: reflows at 320px`); }
     await ctx.close();
   }
 
@@ -653,5 +717,6 @@ try {
   failures.push(`script error: ${e.stack || e}`);
   console.log(e);
 }
+ok(browserIssues.length === 0, `browser console and page errors are clear${browserIssues.length ? ` -> ${browserIssues.join(" | ")}` : ""}`);
 console.log(failures.length ? `\n${failures.length} FAILED` : "\nAll browser checks passed");
 process.exit(failures.length ? 1 : 0);

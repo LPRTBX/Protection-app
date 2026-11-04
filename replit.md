@@ -21,13 +21,13 @@ A development-only copy of JALDO Protection for fictional simulations and produc
 - `artifacts/jaldo-protection-app` — Protection app and its browser simulation
 - `lib/jaldo-orchestration` — shared orchestration kernel
 - `lib/design` — shared design package
-- `PRODUCT_ACCEPTANCE_CRITERIA.md` — proposed product and quality acceptance criteria
+- `PRODUCT_ACCEPTANCE_CRITERIA.md` — approved product and quality acceptance criteria
 
 ## Architecture decisions
 
 - The app reuses the shared kernel; it must not introduce a second orchestration engine.
 - The preview is limited to fictional simulation data and must not connect to live services.
-- Product refinements are gated on review of the acceptance criteria.
+- Product refinements must meet the acceptance criteria.
 
 ## Product
 
