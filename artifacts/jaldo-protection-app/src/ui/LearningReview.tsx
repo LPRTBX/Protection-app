@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
   createLearningRun,
   createLearningMarketingAction,
+  createLearningReceivingEvidence,
   formatSydneyTime,
   LEARNING_EVIDENCE,
   LEARNING_REVIEW_REASON,
@@ -9,19 +10,18 @@ import {
   minutesBetween,
   type LearningPolicyVersion,
   type LearningMarketingAction,
+  type LearningReceivingEvidence,
   type LearningRun,
   type LearningRunKind,
 } from "../sim/learning";
-import { Btn, Panel, StatusChip } from "./parts";
-import "./learning-review.css";
+import { Btn, Disclaimer, Panel, StatusChip } from "./parts";
 
-type EvidenceRecord = { runNumber: number; result: "present" | "not-present" | "unknown" };
 type ReviewProposal = "refine" | "withdraw";
 
 const APPROVAL_ACKNOWLEDGEMENTS = [
   "This is a fixed fictional replay, not a learned or autonomous system.",
   "The proposal changes only which already-available context is connected to a human review.",
-  "The configured rule warrants human review; it does not establish harm, addiction, guilt or a need for restriction.",
+  "The rule requests human review only; it does not decide what action, if any, should follow.",
   "I have authority as the fictional Protection reviewer to approve this simulation-only policy change.",
 ] as const;
 
@@ -42,13 +42,14 @@ function displayStamp(value: string): string {
 function RunTimeline({ run, marketingAction }: { run: LearningRun; marketingAction?: LearningMarketingAction }) {
   const reviewToSummary = minutesBetween(run.reviewAt, run.summaryDeliveredAt);
   return (
-    <div className="table-wrap">
+      <div className="table-wrap" role="region" aria-label={`Fictional run ${run.number} timeline; scroll horizontally if needed`} tabIndex={0}>
       <table className="lr-timeline">
         <caption className="sr-only">Fictional run {run.number}, policy version {run.policyVersion} event timeline in Sydney local time</caption>
         <thead><tr><th scope="col">Scripted event</th><th scope="col">Simulation time</th><th scope="col">Interpretation</th></tr></thead>
         <tbody>
           <tr><th scope="row">Required context ready</th><td>{displayStamp(run.contextReadyAt)}</td><td>Latest required evidence availability used by the shared learning helper.</td></tr>
           <tr><th scope="row">Human review opened</th><td>{displayStamp(run.reviewAt)}</td><td>{run.policyVersion === 2 ? "V2 opens when the final required context is available." : "V1 waits for its fixed 11:20 batch review."}</td></tr>
+          <tr><th scope="row">Separate summary approval</th><td>{displayStamp(run.summaryApprovedAt)}</td><td>A fictional reviewer separately approves the customer-authorised summary for this script.</td></tr>
           {marketingAction ? <>
             <tr><th scope="row">Separate human approval</th><td>{displayStamp(marketingAction.authorisedAt)}</td><td>Fictional reviewer separately approves one simulation-only request for this run.</td></tr>
             <tr><th scope="row">Marketing-system request</th><td>{displayStamp(marketingAction.requestAt)}</td><td>In-memory simulated request only; no live service is contacted and receipt is not inferred.</td></tr>
@@ -83,7 +84,7 @@ export function LearningReview() {
   const [marketingApprovalChecked, setMarketingApprovalChecked] = useState(false);
   const [duplicateMarketingAttempted, setDuplicateMarketingAttempted] = useState(false);
   const [receivingEvidence, setReceivingEvidence] = useState<"present" | "not-present" | "unknown">("unknown");
-  const [evidenceRecords, setEvidenceRecords] = useState<readonly EvidenceRecord[]>([]);
+  const [evidenceRecords, setEvidenceRecords] = useState<readonly LearningReceivingEvidence[]>([]);
   const [proposalChoice, setProposalChoice] = useState<ReviewProposal>("refine");
   const [proposalDecision, setProposalDecision] = useState<ReviewProposal | null>(null);
 
@@ -95,9 +96,10 @@ export function LearningReview() {
     ? activated
     : firstAvailable || (rolledBack && v1FirstComplete);
   const allAcknowledged = acknowledgements.every(Boolean);
-  const evidenceForLatest = latestRun
-    ? evidenceRecords.find((record) => record.runNumber === latestRun.number)
-    : undefined;
+  const evidenceHistoryForLatest = latestRun
+    ? evidenceRecords.filter((record) => record.runNumber === latestRun.number)
+    : [];
+  const evidenceForLatest = evidenceHistoryForLatest[evidenceHistoryForLatest.length - 1];
 
   function announce(text: string, tone: "info" | "warning" | "danger" | "success" = "info") {
     setReviewMessage(text);
@@ -200,23 +202,23 @@ export function LearningReview() {
       announce("Evidence record refused: no separately approved simulated marketing request exists for this run.", "danger");
       return;
     }
-    if (evidenceRecords.some((record) => record.runNumber === latestRun.number)) {
-      announce(`Evidence record refused: run ${latestRun.number} already has a human-recorded receiving-system finding.`, "danger");
+    if (evidenceForLatest?.result === receivingEvidence) {
+      announce(`Duplicate evidence refused for run ${latestRun.number}. The prior finding remains in its history.`, "danger");
       return;
     }
-    const record: EvidenceRecord = { runNumber: latestRun.number, result: receivingEvidence };
+    const record = createLearningReceivingEvidence(latestMarketingAction, receivingEvidence, evidenceHistoryForLatest.length + 1);
     setEvidenceRecords((previous) => [...previous, record]);
-    announce(`Fictional receiving-system evidence manually recorded for run ${latestRun.number}: ${receivingEvidence === "present" ? "request present" : receivingEvidence === "not-present" ? "request not present" : "still unknown"}. This is a human-entered simulation record, not a live-system confirmation.`, "success");
+    announce(`Fictional receiving-system finding ${record.sequence} manually recorded for run ${latestRun.number} at ${displayTime(record.recordedAt)}: ${receivingEvidence === "present" ? "request present" : receivingEvidence === "not-present" ? "request not present" : "still unknown"}. Earlier findings remain unchanged; this is not a live-system confirmation.`, "success");
   }
 
   function authorizeMarketingRequest() {
-    if (!latestRun || !marketingApprovalChecked) {
-      announce("No simulated request created. A run and a separate human reviewer approval are required first.", "danger");
-      return;
-    }
-    if (marketingActions.some((action) => action.runNumber === latestRun.number)) {
+    if (latestRun && marketingActions.some((action) => action.runNumber === latestRun.number)) {
       setDuplicateMarketingAttempted(true);
       announce(`Duplicate action refused for run ${latestRun.number}. Its one-time approval and request record remain unchanged.`, "danger");
+      return;
+    }
+    if (!latestRun || !marketingApprovalChecked) {
+      announce("No simulated request created. A run and a separate human reviewer approval are required first.", "danger");
       return;
     }
     const action = createLearningMarketingAction(latestRun);
@@ -283,7 +285,7 @@ export function LearningReview() {
         <div className="lr-section">
           <h3>Occurrence and timestamp evidence</h3>
           <p>Occurrence is when an event happened. “Available to team” is when a source made that record available to the fictional team. Connection is separate: information can be available to the team but not connected to its review queue.</p>
-          <div className="table-wrap">
+          <div className="table-wrap" role="region" aria-label="Fictional evidence timestamps; scroll horizontally if needed" tabIndex={0}>
             <table className="lr-timeline">
               <caption className="sr-only">Fixed fictional evidence occurrence and availability timestamps, Sydney local time</caption>
               <thead><tr><th scope="col">Evidence</th><th scope="col">Occurrence</th><th scope="col">Available to team</th><th scope="col">Before V2</th><th scope="col">After approved V2</th></tr></thead>
@@ -306,7 +308,7 @@ export function LearningReview() {
             </table>
           </div>
           <p className="note">“Unavailable” means there is no source record to connect. “Available but not connected” means the record exists and the team can access it at the source, but it has not reached the review queue. The proposal changes that connection only; it does not change when events occurred.</p>
-          <p>{LEARNING_REVIEW_REASON}</p>
+          <Disclaimer>{LEARNING_REVIEW_REASON}</Disclaimer>
           <p><strong>Still uncertain:</strong></p>
           <ul className="list">{LEARNING_UNCERTAINTIES.map((item) => <li key={item}>{item}</li>)}</ul>
           <p className="muted">The reviewer who can approve a policy change is the fictional Protection reviewer with the policy-approval responsibility shown below. A model or other operator cannot approve it.</p>
@@ -362,7 +364,7 @@ export function LearningReview() {
         <div className="lr-section">
           <h3>Fixed alert example: human alternatives only</h3>
           <div className="card attention">
-            <p><strong>Unnecessary / inconclusive alert example.</strong> In this separate fixed fictional example, a reviewer finds the matching pattern was routine and no action was needed. That observation is not proof of harm or safety. It can support a human proposal to refine or withdraw a rule, not automatic tightening.</p>
+            <p><strong>Unnecessary / inconclusive alert example.</strong> In this separate fixed fictional example, a reviewer finds the matching pattern was routine and no action was needed. That observation does not prove whether any person was affected. It can support a human proposal to refine or withdraw a rule, not automatic tightening.</p>
             <fieldset className="lr-choice">
               <legend>Choose a human proposal; neither choice changes an active rule</legend>
               <label>
@@ -401,27 +403,35 @@ export function LearningReview() {
                   <p className="muted">Approval creates only a local scripted event. It cannot change an account, contact a customer or call a marketing service.</p>
                 </fieldset>
               )}
-              {evidenceForLatest ? (
-                <p className="lr-status" role="status" data-tone={evidenceForLatest.result === "present" ? "success" : "warning"}>
-                  {evidenceForLatest.result === "present" ? "Human-recorded fictional evidence: request appears in the receiving-system record. This does not by itself prove the requested outcome." : evidenceForLatest.result === "not-present" ? "Human-recorded fictional evidence: request was not found in the receiving-system record. Its outcome is not confirmed; do not retry automatically." : "Still unresolved: the human record is unknown or inconclusive, so the acknowledgement remains unresolved."} This is not a live-system result.
-                </p>
-              ) : latestMarketingAction ? (
+              {latestMarketingAction ? (
                 <>
-                  <p className="lr-status" data-tone="warning">Unresolved · no receiving-system evidence recorded. Do not claim the request succeeded.</p>
+                  <p className="lr-status" role="status" data-tone={evidenceForLatest?.result === "present" ? "success" : "warning"}>
+                    {!evidenceForLatest ? "Unresolved · no receiving-system evidence recorded. Do not claim the request succeeded." : evidenceForLatest.result === "present" ? "Human-recorded fictional evidence: request appears in the receiving-system record. This does not by itself prove the requested outcome." : evidenceForLatest.result === "not-present" ? "Human-recorded fictional evidence: request was not found in the receiving-system record. Its outcome is not confirmed; do not retry automatically." : "Still unresolved: the human record is unknown or inconclusive, so the acknowledgement remains unresolved."} This is not a live-system result.
+                  </p>
                   <fieldset className="lr-choice">
                     <legend>Fictional receiving-system evidence found by a human</legend>
                     <label><input type="radio" name="receiving-evidence" value="present" checked={receivingEvidence === "present"} onChange={() => setReceivingEvidence("present")} /><span>Request present in receiving-system record</span></label>
                     <label><input type="radio" name="receiving-evidence" value="not-present" checked={receivingEvidence === "not-present"} onChange={() => setReceivingEvidence("not-present")} /><span>Request not present</span></label>
                     <label><input type="radio" name="receiving-evidence" value="unknown" checked={receivingEvidence === "unknown"} onChange={() => setReceivingEvidence("unknown")} /><span>Still unknown / inconclusive</span></label>
                   </fieldset>
-                  <Btn onClick={recordReceivingEvidence}>Manually record receiving-system evidence</Btn>
+                  <Btn onClick={recordReceivingEvidence} disabled={evidenceForLatest?.result === receivingEvidence}>Manually record new receiving-system evidence</Btn>
+                  {evidenceHistoryForLatest.length ? (
+                    <div className="lr-evidence-history">
+                      <p><strong>Append-only evidence history for this request</strong></p>
+                      <ol className="history">{evidenceHistoryForLatest.map((record) => (
+                        <li key={`${record.runNumber}-${record.sequence}`}>
+                          Finding {record.sequence} at {displayTime(record.recordedAt)}: {record.result === "present" ? "request present in receiving-system record" : record.result === "not-present" ? "request not present in receiving-system record" : "unknown / inconclusive"}
+                        </li>
+                      ))}</ol>
+                    </div>
+                  ) : null}
                 </>
               ) : <p className="empty">No action or acknowledgement exists until a reviewer separately approves the simulated request.</p>}
               {latestMarketingAction ? (
                 <div className="lr-actions">
                   <Btn onClick={authorizeMarketingRequest}>Attempt duplicate action replay</Btn>
                   {duplicateMarketingAttempted ? <span className="muted">Duplicate action rejected; request count and history did not change.</span> : null}
-                  {evidenceForLatest ? <span className="muted">One receiving-system finding is retained per run; duplicate evidence recording is refused.</span> : null}
+                  {evidenceHistoryForLatest.length ? <span className="muted">New findings append to history; an identical latest finding is refused.</span> : null}
                 </div>
               ) : null}
             </div>
@@ -441,7 +451,7 @@ export function LearningReview() {
 
         <div className="lr-section">
           <h3>What changed after review</h3>
-          <div className="table-wrap">
+          <div className="table-wrap" role="region" aria-label="Learning review comparison; scroll horizontally if needed" tabIndex={0}>
             <table className="lr-timeline">
               <caption className="sr-only">Observed issue, proposal, approval and next-run evidence for each learning area</caption>
               <thead><tr><th scope="col">Area</th><th scope="col">Observed issue</th><th scope="col">Proposed adjustment</th><th scope="col">Approval status</th><th scope="col">Next-run evidence</th></tr></thead>
@@ -471,7 +481,7 @@ export function LearningReview() {
             </table>
           </div>
           <p className="muted">All counts and time intervals above are drawn from <code>learning.ts</code> helper outputs and labelled as simulation values.</p>
-          <p className="muted">This learning walkthrough complements the existing customer-requested break (P1) and operator-originated early-support (P2) scenarios. It does not alter their records or controls.</p>
+          <p className="muted">This sits alongside the existing customer-requested break (P1), operator-originated early-support (P2), and failure-pattern presets. Open <a className="lr-simulation-link" href="#/simulation">Simulation controls</a> to explore those patterns; this walkthrough does not alter their records. The imported preview has no separate high-risk classification scenario, so this example does not invent one.</p>
         </div>
 
         <div className="lr-section">

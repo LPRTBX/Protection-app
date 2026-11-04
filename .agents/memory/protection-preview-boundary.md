@@ -8,3 +8,10 @@ This workspace is a development-only preview import of the existing reviewed JAL
 **Why:** The user explicitly requires the approved application to be restored without feature changes.
 
 **How to apply:** Limit work to the dedicated Protection preview. Leave other apps, including Sport previews, untouched. Do not merge, publish, deploy, enable real accounts, use real customer data, connect live Core services or send external communications. Use the supplied source archive rather than retrying GitHub authentication.
+
+### High zoom and scrollable content
+At 200% zoom, test page-level overflow separately from intentionally scrollable tables. A contained table can be correct while a nearby heading or fieldset legend still widens the page; scroll regions also need keyboard access.
+
+**Why:** The Protection browser check found that horizontal overflow came from nearby text controls, not the table that was already scrollable.
+
+**How to apply:** When changing Protection layouts, verify 200% zoom on the rendered page, keep data-table regions focusable, and give small inline navigation links a usable touch target.

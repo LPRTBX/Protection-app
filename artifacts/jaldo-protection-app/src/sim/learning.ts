@@ -34,6 +34,13 @@ export interface LearningMarketingAction {
   evidenceDeadlineAt: string;
 }
 
+export interface LearningReceivingEvidence {
+  runNumber: number;
+  result: "present" | "not-present" | "unknown";
+  sequence: number;
+  recordedAt: string;
+}
+
 const at = (hour: number, minute: number) =>
   `2026-11-03T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00+11:00`;
 
@@ -103,6 +110,19 @@ export function createLearningMarketingAction(run: LearningRun): LearningMarketi
     authorisedAt,
     requestAt,
     evidenceDeadlineAt: plusMinutes(requestAt, 10),
+  };
+}
+
+export function createLearningReceivingEvidence(
+  action: LearningMarketingAction,
+  result: LearningReceivingEvidence["result"],
+  sequence: number,
+): LearningReceivingEvidence {
+  return {
+    runNumber: action.runNumber,
+    result,
+    sequence,
+    recordedAt: plusMinutes(action.evidenceDeadlineAt, (sequence - 1) * 5),
   };
 }
 

@@ -206,7 +206,8 @@ textarea, input[type="text"] { font: inherit; width: 100%; padding: .5rem .6rem;
 .toast { position: fixed; left: .6rem; right: .6rem; bottom: .6rem; z-index: 40; background: var(--jaldo-surface-elevated); border: 2px solid var(--jaldo-primary); border-radius: var(--jaldo-radius-lg); box-shadow: var(--jaldo-shadow-lg); padding: .3rem .8rem; max-width: 40rem; margin: 0 auto; }
 .dark .toast { border-color: var(--jaldo-text-muted); }
 .journey { list-style: none; padding: 0; margin: .6rem 0; display: grid; gap: .6rem; }
-.journey li { display: flex; gap: .8rem; align-items: flex-start; background: var(--jaldo-surface); border: 1px solid var(--jaldo-border); border-radius: var(--jaldo-radius-md); padding: .7rem .8rem; }
+.journey li { display: flex; min-width: 0; gap: .8rem; align-items: flex-start; background: var(--jaldo-surface); border: 1px solid var(--jaldo-border); border-radius: var(--jaldo-radius-md); padding: .7rem .8rem; }
+.journey li > div { min-width: 0; overflow-wrap: anywhere; }
 .journey li[aria-current="step"] { border: 2px solid var(--jaldo-secondary); }
 .journey li p { margin: 0; }
 .journey-n { flex: none; width: 2rem; height: 2rem; border-radius: 50%; border: 2px solid var(--jaldo-text-muted); display: inline-flex; align-items: center; justify-content: center; font-weight: 700; }

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createLearningMarketingAction, createLearningRun, formatSydneyTime, LEARNING_EVIDENCE, minutesBetween } from "../sim/learning";
+import { createLearningMarketingAction, createLearningReceivingEvidence, createLearningRun, formatSydneyTime, LEARNING_EVIDENCE, minutesBetween } from "../sim/learning";
 
 test("fictional sequence keeps occurrence time separate from information availability", () => {
   const session = LEARNING_EVIDENCE.find((item) => item.id === "session")!;
@@ -25,8 +25,20 @@ test("acknowledgement deadline and summary verification derive from the review t
   const action = createLearningMarketingAction(run);
   assert.equal(minutesBetween(action.authorisedAt, action.requestAt), 2);
   assert.equal(minutesBetween(action.requestAt, action.evidenceDeadlineAt), 10);
+  assert.equal(minutesBetween(run.reviewAt, run.summaryApprovedAt), 8);
+  assert.equal(minutesBetween(run.summaryApprovedAt, run.summaryDeliveredAt), 1);
   assert.equal(minutesBetween(run.summaryDeliveredAt, run.summaryVerifiedAt), 1);
   assert.equal(run.repeatQuestions, 1);
   assert.equal(createLearningRun("first", 1, 1).repeatQuestions, 3);
+});
+
+test("receiving-system findings append after the deadline without rewriting an unknown result", () => {
+  const action = createLearningMarketingAction(createLearningRun("next", 2, 2));
+  const unknown = createLearningReceivingEvidence(action, "unknown", 1);
+  const present = createLearningReceivingEvidence(action, "present", 2);
+  assert.equal(unknown.recordedAt, action.evidenceDeadlineAt);
+  assert.equal(minutesBetween(unknown.recordedAt, present.recordedAt), 5);
+  assert.equal(unknown.result, "unknown");
+  assert.equal(present.result, "present");
 });
 

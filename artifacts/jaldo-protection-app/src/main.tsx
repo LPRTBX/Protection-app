@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "@workspace/design/tokens/theme.css";
 import "./styles.css";
+import "./ui/learning-review.css";
 import { App } from "./ui/App";
 
 // Follow the person's colour-scheme preference using the approved light and dark tokens.
