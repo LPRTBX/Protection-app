@@ -15,3 +15,10 @@ At 200% zoom, test page-level overflow separately from intentionally scrollable 
 **Why:** The Protection browser check found that horizontal overflow came from nearby text controls, not the table that was already scrollable.
 
 **How to apply:** When changing Protection layouts, verify 200% zoom on the rendered page, keep data-table regions focusable, and give small inline navigation links a usable touch target.
+
+### Separate refinement project
+The user approved keeping the reviewed preview as a baseline and doing future vision-led code, UX and UI refinements only in a separate Protection-only Replit project.
+
+**Why:** They want a standalone partner-ready project while preserving the reviewed preview and other apps.
+
+**How to apply:** Start from the latest tested Protection source, retain its shared kernel and design package, keep fictional-only/no-live-service boundaries, and leave the original preview unchanged.
