@@ -55,3 +55,4 @@ Thumbs.db
 .local/
 /generated-artifacts/
 /attached_assets/*.zip
+/zipFile.zip

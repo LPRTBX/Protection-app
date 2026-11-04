@@ -1,45 +1,48 @@
-# [Project name]
+# JALDO Protection — isolated development copy
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+A development-only copy of JALDO Protection for fictional simulations and product refinement. It retains the shared orchestration kernel and design package; it does not connect to live services or use real customer data.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- `pnpm --filter @workspace/jaldo-protection-app run dev` — run the Protection preview
+- `pnpm --filter @workspace/jaldo-protection-app run typecheck` — typecheck the app
+- `pnpm --filter @workspace/jaldo-protection-app test` — run the app tests
+- `pnpm --filter @workspace/jaldo-protection-app run ui-check` — run UI checks
+- No API server, database, secrets, or live service is required for the Protection simulation.
 
 ## Stack
 
 - pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
-- DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- React + Vite
+- Shared JALDO orchestration kernel and design package
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/jaldo-protection-app` — Protection app and its browser simulation
+- `lib/jaldo-orchestration` — shared orchestration kernel
+- `lib/design` — shared design package
+- `PRODUCT_ACCEPTANCE_CRITERIA.md` — proposed product and quality acceptance criteria
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- The app reuses the shared kernel; it must not introduce a second orchestration engine.
+- The preview is limited to fictional simulation data and must not connect to live services.
+- Product refinements are gated on review of the acceptance criteria.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+JALDO Protection helps responsible teams notice when available context warrants human review, coordinate only explicitly authorized support, verify what actually happened, and improve future responses through accountable, reversible learning. The product should favor earlier, better-informed review, not increased intervention.
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- Keep the original Repl untouched and do not publish this copy.
+- Keep changes scoped to this Protection-only project.
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- Preserve the distinction between missing context and unconnected context.
+- Verification of execution must not be presented as proof that support helped.
 
 ## Pointers
 
-- See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+- See `PRODUCT_ACCEPTANCE_CRITERIA.md` before making product changes.
