@@ -2,6 +2,7 @@ import { customerView, operationsView, operatorView } from "../sim/views";
 import { Panel, StatusChip } from "./parts";
 import { ScenarioPicker } from "./ScenarioPicker";
 import { useWorld } from "./world";
+import { LearningReview } from "./LearningReview";
 
 /** The journey in seven steps, with live progress read from the same projections the three views use. */
 export function Guide() {
@@ -41,6 +42,7 @@ export function Guide() {
       <Panel title="Choose what to demonstrate" status="simulation" intro="Two scenarios share the same app, kernel and three role views. The customer-requested break (P1) is unchanged.">
         <ScenarioPicker idPrefix="guide" />
       </Panel>
+      <p className="jump"><a className="btn btn-quiet" href="#learning-review">Explore the Next time learning demonstration</a></p>
       <p className="lede">{w.scenario === "early-support" ? "An upstream protection source asks for a human early-support review. JALDO explains the context, prepares an optional response, and a named person decides. Nothing is applied to the customer's account, the customer sees nothing until an authorised message is delivered, and the customer stays in control of what happens next." : "A customer asks for a break.  A person authorises each specific action. Separate simulated systems apply them. What was applied, by whom, and what is still open stays visible to the people who need to see it, and nothing more is shown to anyone else. It coordinates the response across existing systems; it does not replace an operator's responsible-gambling programme, score anyone, or only restrict."}</p>
       <p className="tagline"><strong>One Core. Configured for your world.</strong></p>
       <Panel title="The journey" status="implemented" intro="Each step is a real kernel command. Progress below is read from the records, not from a script.">
@@ -75,6 +77,7 @@ export function Guide() {
         </ul>}
         <p><a className="btn btn-quiet" href="#/simulation">Open Simulation controls</a></p>
       </Panel>
+      <LearningReview />
       <Panel title="What this is" status="simulation">
         <p>A fictional prototype. All names, systems and data are invented, and everything lives in this browser tab. It does not touch any real account, marketing platform, notification service or gambling system. It uses the shared JALDO kernel in the browser; it is not connected to a live JALDO Core.</p>
         <p><StatusChip status="implemented" /> means the screen runs the shared kernel. <StatusChip status="simulation" /> means invented data and stand-in systems. <StatusChip status="future" /> means not built.</p>
