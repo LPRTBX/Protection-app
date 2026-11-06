@@ -1,0 +1,16 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "kw3zH9JtY-miAY6LtvTCw"
+uri = "file://generated-artifacts/protection-history-6baf83c9759f0baffdf1754dab01b7bc4af16bc1.bundle"
+type = "unspecified"
+title = "Protection workspace Git history bundle"
+description = "Full-history Git bundle for the current Protection workspace at main 6baf83c9759f0baffdf1754dab01b7bc4af16bc1. Includes tracked source and all local refs; excludes workspace configuration and ignored environment files."
+logical_id = "b75c83f0-184a-45eb-b7a9-ccbff2fc34c0"
+content_hash = "sha256:d840511b1ca7b57c35354d95db4e767bcd6fd2dc594a042c2c5fc79ebd96a421"
+size = 442635
+mtime_ms = 1793941473599
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:2503151c-e730-4fee-b089-ba62979b2b6c/b75c83f0-184a-45eb-b7a9-ccbff2fc34c0/c109a756-1392-426c-b360-8b11f05c4f03"
+storage_version_token = "1793941479458782"
+content_type = "application/octet-stream"
