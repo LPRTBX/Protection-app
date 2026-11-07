@@ -14,7 +14,7 @@ import type { GovernedAction } from "@workspace/jaldo-orchestration";
  *   confirmed     a simulated read-back recorded in this demo matched, and a named person recorded the confirmation
  *   unresolved    a gap a person must decide on (kernel: unresolved, declined, or accepted-then-interrupted)
  *
- * Contract 1.0 has no queue state. The two "approved" variants are names for facts the kernel already holds.
+ * A queued action remains in the approved track position: its dispatch is committed, but delivery is not recorded.
  * Confirmed is not proof of wellbeing, reduced harm or operator compliance.
  */
 export const STAGES = ["proposed", "approved", "waiting", "retry", "sent", "acknowledged", "applied", "confirmed", "unresolved"] as const;
@@ -68,6 +68,8 @@ export function stageOf(a: GovernedAction, ctx: { waitingFor: readonly string[];
       if (a.attempts.length > 0) return mk("retry", `Approved. Attempt ${a.attempts.length} of ${ctx.maxAttempts} did not go through, so another attempt is available. Nothing is recorded as sent.`);
       return mk("approved", "A named person authorised it. It has not been sent.");
     }
+    case "queued":
+      return mk("approved", "Approved and queued for dispatch. The dispatch outcome has not been recorded; nothing is recorded as sent.", false, "Approved — dispatch pending");
     case "sent":
       return mk("sent", "Recorded as delivered. The other system has not said it received it.", true);
     case "received":

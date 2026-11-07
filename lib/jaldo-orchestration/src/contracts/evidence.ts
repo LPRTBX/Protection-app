@@ -23,9 +23,11 @@ export const EVIDENCE_KINDS = [
   "authority.stale",
   "configuration.adopted",
   "disclosure.made",
+  "execution.queued",
   "execution.attempted",
   "execution.failed",
   "execution.uncertain",
+  "execution.cancelled",
   "dispatch.reconciled",
   "receipt.recorded",
   "acceptance.recorded",
@@ -37,6 +39,18 @@ export const EVIDENCE_KINDS = [
   "recommendation.dismissed",
   "recovery.proposed",
   "communication.released",
+  /** Contract 1.2 (all additive; produced only by configurations that opt in). */
+  "plan.revised",
+  "deadline.set",
+  "deadline.met",
+  "deadline.rescheduled",
+  "deadline.cancelled",
+  "response.recorded",
+  "followup.opened",
+  "followup.closed",
+  "link.recorded",
+  "link.status-recorded",
+  "link.withdrawn",
 ] as const;
 export type EvidenceKind = (typeof EVIDENCE_KINDS)[number];
 

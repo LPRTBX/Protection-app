@@ -10,7 +10,10 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --import tsx/esm --test src/tests/*.test.ts src/tests/*.test.tsx",
     "ui-check": "node scripts/ui-check.mjs",
-    "mutation": "node scripts/mutation-check.mjs"
+    "learning-check": "node scripts/learning-check.mjs",
+    "mutation": "node scripts/mutation-check.mjs",
+    "reviewer-check": "node scripts/reviewer-check.mjs",
+    "observer-check": "node scripts/observer-check.mjs"
   },
   "dependencies": {
     "@workspace/design": "workspace:*",

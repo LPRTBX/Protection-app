@@ -313,3 +313,170 @@ a.btn { text-decoration: none; }
 .choice .note { margin: .5rem 0; }
 .track li { min-width: 0; }
 .track-word { min-width: 0; overflow-wrap: anywhere; }
+
+/* Return link to the Protection overview on the main site, and the "how the parts connect" list. */
+.overview-bar { background: var(--jaldo-secondary); color: var(--jaldo-on-secondary); padding: .2rem 1rem; }
+.overview-link { display: flex; align-items: center; gap: .4rem; min-height: 44px; font-weight: 700; color: var(--jaldo-on-secondary); text-decoration: none; }
+.overview-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+.dark .overview-link { color: var(--jaldo-on-secondary); }
+.overview-link:focus-visible { outline-color: var(--jaldo-on-secondary); }
+.overview-sub { font-weight: 500; opacity: .9; font-size: .85rem; display: none; }
+@media (min-width: 600px) { .overview-sub { display: inline; } }
+.connected-parts { list-style: none; margin: 0; padding: 0; display: grid; gap: .6rem; }
+.connected-parts li { display: grid; gap: .15rem; background: var(--jaldo-surface); border: 1px solid var(--jaldo-border); border-radius: var(--jaldo-radius-md); padding: .7rem .8rem; }
+.connected-parts li span { color: var(--jaldo-text-muted); font-size: .92rem; }
+@media (min-width: 900px) { .connected-parts { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.viewpoint-links { display: block; margin-top: .2rem; }
+.parts-links { display: flex; flex-wrap: wrap; gap: .1rem 1rem; }
+.parts-links a, .connected-parts li > a { min-height: 24px; display: inline-block; }
+.footer a, .viewpoint-links a { display: inline-block; min-height: 24px; line-height: 24px; }
+
+/* UX reset: grouped navigation */
+.nav-group { padding: .2rem .5rem .4rem; }
+.nav-group + .nav-group { border-top: 1px solid var(--jaldo-border); }
+.nav-heading { margin: .5rem .8rem .1rem; font-size: .74rem; letter-spacing: .06em; text-transform: uppercase; font-weight: 700; color: var(--jaldo-text-muted, var(--jaldo-text)); }
+.nav-note { margin: 0 .8rem .3rem; font-size: .78rem; line-height: 1.4; }
+.nav-group ul { padding: 0; }
+/* UX reset: next-action banner and compact secondary material */
+.next-step { border: 2px solid var(--jaldo-secondary); border-radius: var(--jaldo-radius-md); padding: .9rem 1rem; margin: .5rem 0 1rem; background: var(--jaldo-surface-elevated); }
+.next-step h2 { margin: 0 0 .3rem; font-size: 1.15rem; }
+.next-step p { margin: .25rem 0; }
+.progress-line { font-weight: 600; margin: 0 0 .3rem; }
+details.secondary { border: 1px solid var(--jaldo-border); border-radius: var(--jaldo-radius-md); padding: .2rem .9rem; margin: .8rem 0; background: var(--jaldo-surface); }
+details.secondary > summary { cursor: pointer; font-weight: 700; min-height: 44px; display: flex; align-items: center; }
+details.secondary[open] > summary { margin-bottom: .4rem; }
+.boundary-note { font-size: .9rem; }
+/* Long headings must reflow at 200% text and at 320px; inline links in notes keep a 24px target. */
+h1, h2, h3 { overflow-wrap: anywhere; }
+.boundary-note a { display: inline-block; min-height: 24px; line-height: 24px; }
+
+/* Decisions: availability groups, compact summaries and the explicit review entry. */
+.decision-group { margin: 1.1rem 0 0; }
+.decision-group > h3 { font-size: 1.05rem; margin: 0 0 .5rem; }
+.decision-group .count { font-weight: 500; color: var(--jaldo-text-muted); }
+.decision-group.group-available > h3 { color: var(--jaldo-text); }
+.card.decision { margin: 0 0 .7rem; }
+.card.decision.group-available { border-left: 4px solid var(--jaldo-secondary); }
+.card.decision.group-waiting { border-left: 4px dashed var(--jaldo-border-strong, var(--jaldo-border)); }
+.available-line, .blocker { margin: .35rem 0; }
+.blocker { padding: .4rem .6rem; border-radius: var(--jaldo-radius-md); background: var(--jaldo-surface); border: 1px dashed var(--jaldo-border); }
+details.review-action { margin: .6rem 0 0; border-top: 1px solid var(--jaldo-border); padding-top: .2rem; }
+details.review-action > summary { cursor: pointer; font-weight: 700; min-height: 44px; display: flex; align-items: center; color: var(--jaldo-secondary-text, var(--jaldo-text)); }
+details.review-action[open] > summary { margin-bottom: .3rem; }
+.review-body h5 { margin: .9rem 0 .3rem; font-size: .95rem; }
+.review-body h5:first-child { margin-top: .2rem; }
+.group-label { margin: .6rem 0 .2rem; }
+.card.decision.prepare { padding: .6rem .8rem; }
+
+/* Role-focused experiences: front door, reviewer workspace, presenter panel. */
+.route-start .main, .route-reviewer .main { max-width: 64rem; margin: 0 auto; width: 100%; box-sizing: border-box; }
+.topbar .leave { margin-left: auto; min-height: 44px; display: inline-flex; align-items: center; }
+.auth-note { margin: .1rem 0 0; font-size: .85rem; }
+.experiences { list-style: none; margin: 1rem 0; padding: 0; display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 760px) { .experiences { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.experience { display: flex; flex-direction: column; gap: .5rem; padding: 1.1rem 1.2rem; }
+.experience h2 { font-size: 1.3rem; }
+.experience .who { font-weight: 700; color: var(--jaldo-secondary-text, var(--jaldo-text)); margin: 0; }
+.experience .btn { margin-top: auto; align-self: flex-start; }
+.reviewer-nav { border-bottom: 1px solid var(--jaldo-border); background: var(--jaldo-surface-elevated); }
+.reviewer-nav ul { list-style: none; margin: 0 auto; padding: .35rem .5rem; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .3rem; max-width: 60rem; box-sizing: border-box; }
+@media (min-width: 1100px) { .reviewer-nav ul { padding-inline: 0; } }
+.reviewer-nav a { display: flex; flex-direction: column; align-items: flex-start; gap: .05rem; min-height: 44px; padding: .45rem .55rem; border-radius: var(--jaldo-radius-md); text-decoration: none; color: var(--jaldo-text); font-weight: 700; position: relative; box-sizing: border-box; height: 100%; }
+.reviewer-nav a:hover { background: var(--jaldo-surface); }
+.reviewer-nav a[aria-current="page"] { background: var(--jaldo-secondary); color: var(--jaldo-on-secondary); }
+.reviewer-nav .step-n { font-size: .72rem; opacity: .85; }
+.reviewer-nav .step-label { font-size: .95rem; overflow-wrap: anywhere; }
+.reviewer-nav .nav-sub { display: none; font-weight: 500; font-size: .78rem; }
+@media (min-width: 640px) { .reviewer-nav .nav-sub { display: block; } }
+.badge { display: inline-block; margin-top: .15rem; padding: .05rem .45rem; border-radius: 999px; border: 1.5px solid currentColor; font-size: .7rem; font-weight: 700; line-height: 1.5; }
+.count-lines { margin: .6rem 0; padding-left: 1.1rem; }
+.actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.examples { list-style: none; margin: .6rem 0; padding: 0; display: grid; gap: .8rem; }
+@media (min-width: 760px) { .examples { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.examples .card { display: flex; flex-direction: column; gap: .35rem; }
+.examples .btn { margin-top: auto; align-self: flex-start; }
+.example-loader h2 { font-size: 1.15rem; }
+.setup-label { padding: .45rem .7rem; border: 1.5px dashed var(--jaldo-border); border-radius: var(--jaldo-radius-md); background: var(--jaldo-surface); }
+.tag { margin-left: .5rem; font-size: .72rem; font-weight: 700; padding: .05rem .45rem; border: 1px solid var(--jaldo-border); border-radius: 999px; }
+/* The presenter panel is visibly a different surface: dashed, tinted, and labelled as outside the reviewer's role. */
+.presenter { margin: 1.5rem auto 1rem; max-width: 64rem; width: 100%; box-sizing: border-box; padding: 0 1rem; }
+.presenter-details { border: 2px dashed var(--jaldo-border); border-radius: var(--jaldo-radius-md); background: var(--jaldo-surface); padding: .2rem 1rem .8rem; }
+.presenter-details > summary { cursor: pointer; font-weight: 700; min-height: 44px; display: flex; align-items: center; }
+.presenter-note { margin: .2rem 0 .8rem; padding: .5rem .7rem; border-left: 4px solid var(--jaldo-secondary); background: var(--jaldo-surface-elevated); }
+.presenter-section h2 { font-size: 1.1rem; }
+.follow-item { margin: 0 0 .7rem; }
+
+/* Demonstration observer view: three role panels reading one session. */
+.route-observe { height: 100vh; min-height: 38rem; display: flex; flex-direction: column; }
+.observer-notice { display: block; padding-block: .45rem; }
+.observer-notice > p { margin: .1rem 0; }
+.observer-notice .btn { min-height: 44px; vertical-align: middle; }
+.primary-experience { border: 2px solid var(--jaldo-secondary); margin: 1rem 0; }
+.primary-experience .btn { align-self: flex-start; }
+.tag-primary { margin: 0; font-size: .75rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--jaldo-secondary-text, var(--jaldo-text)); }
+.secondary-intro { margin: .8rem 0 .2rem; }
+.observer-grid { flex: 1; display: grid; gap: .8rem; padding: .8rem; box-sizing: border-box; grid-template-columns: repeat(3, minmax(0, 1fr)); min-height: 0; max-width: 120rem; width: 100%; margin: 0 auto; }
+.obs-panel { display: flex; flex-direction: column; min-width: 0; min-height: 0; border: 1.5px solid var(--jaldo-border); border-radius: var(--jaldo-radius-md); background: var(--jaldo-bg); overflow: hidden; }
+.obs-panel[hidden] { display: none; }
+.obs-panel-head { display: flex; gap: .5rem; align-items: flex-start; padding: .55rem .8rem; border-bottom: 1px solid var(--jaldo-border); background: var(--jaldo-surface-elevated); }
+.obs-panel-head h2 { font-size: 1.05rem; }
+.obs-panel-head > div { flex: 1; min-width: 0; }
+.obs-sees { margin: .1rem 0 0; font-size: .8rem; }
+.panel-customer .obs-panel-head { border-top: 4px solid var(--jaldo-secondary); }
+.panel-reviewer .obs-panel-head { border-top: 4px solid var(--jaldo-primary, var(--jaldo-text)); }
+.panel-operations .obs-panel-head { border-top: 4px dashed var(--jaldo-border-strong, var(--jaldo-border)); }
+.obs-pulse, .obs-unseen { font-size: .72rem; font-weight: 700; padding: .05rem .5rem; border-radius: 999px; border: 1.5px solid var(--jaldo-secondary); white-space: nowrap; }
+.obs-pulse:empty { display: none; }
+.obs-nav ul { list-style: none; margin: 0; padding: .3rem .5rem; display: flex; flex-wrap: wrap; gap: .3rem; border-bottom: 1px solid var(--jaldo-border); }
+.obs-nav a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 .75rem; border-radius: 999px; text-decoration: none; font-weight: 700; color: var(--jaldo-text); border: 1.5px solid var(--jaldo-border); background: var(--jaldo-surface); }
+.obs-nav a[aria-current="page"] { background: var(--jaldo-secondary); color: var(--jaldo-on-secondary); border-color: var(--jaldo-secondary); }
+.obs-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: .7rem .8rem; overscroll-behavior: contain; }
+.obs-scroll:focus-visible { outline-offset: -3px; }
+.obs-scroll .page-title { font-size: 1.25rem; margin: 0 0 .6rem; }
+.obs-result { padding: .2rem .8rem; border-top: 1px solid var(--jaldo-border); min-height: 0; }
+.obs-result .live:empty { display: none; }
+.panel-switch { display: flex; gap: .4rem; padding: .5rem .8rem 0; flex-wrap: wrap; }
+.panel-switch .btn { min-height: 44px; display: inline-flex; gap: .4rem; align-items: center; }
+.panel-switch .btn[aria-pressed="true"] { background: var(--jaldo-secondary); color: var(--jaldo-on-secondary); border-color: var(--jaldo-secondary); }
+.observer-grid[data-mode="tablet"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.observer-grid[data-mode="phone"] { grid-template-columns: minmax(0, 1fr); }
+.destination { border: 1.5px dashed var(--jaldo-border); border-radius: var(--jaldo-radius-md); padding: .6rem .7rem; margin: 0 0 .8rem; background: var(--jaldo-surface); }
+.destination-head { display: flex; gap: .5rem; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.destination-head h3 { font-size: 1rem; }
+.destination-row { margin: .5rem 0; }
+.destination-controls { margin-top: .7rem; padding: .55rem .65rem; border: 1.5px solid var(--jaldo-secondary); border-radius: var(--jaldo-radius-md); background: var(--jaldo-bg); }
+.destination-controls h4 { margin: 0 0 .2rem; font-size: .92rem; }
+.obs-scroll .phone-stage { padding: 0; display: block; }
+.obs-scroll .phone { max-width: none; width: 100%; border: 0; box-shadow: none; border-radius: 0; min-height: 0; }
+.obs-scroll .toast-space { display: none; }
+/* A brief highlight on an item that really changed. An outline and a fading glow only: no background change, so text contrast is never affected. It never moves focus, remounts or resets anything. */
+[data-changed] { outline: 2px solid var(--jaldo-secondary); outline-offset: 2px; animation: obs-flash 2.4s ease-out; }
+@keyframes obs-flash { 0% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--jaldo-secondary) 45%, transparent); } 100% { box-shadow: 0 0 0 0 transparent; } }
+@media (prefers-reduced-motion: reduce) { [data-changed] { animation: none; } }
+
+.notice-more > summary { cursor: pointer; font-weight: 700; min-height: 44px; display: flex; align-items: center; }
+.notice-more[open] { padding-bottom: .3rem; }
+.notice-more p { margin: .2rem 0; }
+/* Phones: the page scrolls, and the single visible panel gets nearly the whole screen. */
+@media (max-width: 699px) {
+  .route-observe { height: auto; min-height: 100vh; }
+  .observer-grid[data-mode="phone"] { flex: none; height: calc(100dvh - 4.5rem); min-height: 30rem; }
+}
+/* Tablet and phone: the panel switch stays in view, so an update elsewhere is always identified. */
+@media (max-width: 1099px) {
+  .panel-switch { position: sticky; top: 0; z-index: 5; background: var(--jaldo-bg); padding-block: .4rem; border-bottom: 1px solid var(--jaldo-border); }
+}
+@media (max-width: 699px) {
+  .route-observe .topbar { flex-wrap: wrap; gap: .3rem .6rem; padding-block: .4rem; }
+  .route-observe .topbar .brand { flex-wrap: wrap; gap: .3rem .6rem; }
+  .route-observe .topbar .vertical { font-size: .85rem; }
+  .route-observe .topbar .leave { margin-left: 0; font-size: .85rem; padding: 0 .6rem; }
+  .observer-notice { font-size: .85rem; }
+}
+
+.reset-in-more { display: none; }
+@media (max-width: 699px) {
+  .observer-notice .chip { display: none; }
+  .reset-inline { display: none; }
+  .reset-in-more { display: block; }
+}

@@ -10,11 +10,12 @@ import {
   openCoordination,
   type Actor,
 } from "../index";
-import { REFERENCE_CONFIGURATIONS } from "../deployments";
+import { PORTABILITY_CONFIGURATIONS, REFERENCE_CONFIGURATIONS } from "../deployments";
 import { CHECKS4, grant, Harness, OTHER_DEPLOYMENT, satisfyPrerequisites, SCOPE, shape, supportAccepted } from "./harness";
 
 /** Execution, replay, authority and isolation contracts — run against both configurations. */
-for (const config of Object.values(REFERENCE_CONFIGURATIONS)) {
+// Every reference configuration AND the Stage 6B.2 portability configurations, unchanged (ADR-0037 D-7).
+for (const config of [...Object.values(REFERENCE_CONFIGURATIONS), ...Object.values(PORTABILITY_CONFIGURATIONS)]) {
   const s = shape(config);
 
   describe(`reliability and authority — ${config.id}`, () => {
@@ -283,13 +284,16 @@ for (const config of Object.values(REFERENCE_CONFIGURATIONS)) {
       const id = h.lastActionId();
       h.ok({ type: "submit", actionId: id }, h.owner);
       h.ok({ type: "approve", actionId: id, checks: CHECKS4 }, h.subject);
-      const next = loadConfiguration({ ...JSON.parse(JSON.stringify(config)), version: "1.1.0" });
+      // The next minor of THIS configuration's own version (a configuration may already be at 1.1.0).
+      const [maj, min] = config.version.split(".").map(Number);
+      const nextVersion = `${maj}.${min + 1}.0`;
+      const next = loadConfiguration({ ...JSON.parse(JSON.stringify(config)), version: nextVersion });
       // A command under a different configuration version is refused, not silently re-interpreted.
       assert.equal(applyCommand(next, h.state, { id: "x", command: { type: "execute", actionId: id } }, h.owner, h.facts()).ok, false);
       const r = adoptConfiguration(config, next, h.state, { id: "adopt-1" }, h.owner, h.facts());
       assert.ok(r.ok);
       const a = r.state.actions.find((x) => x.id === id)!;
-      assert.deepEqual([r.state.config.version, a.state, a.approval], ["1.1.0", "awaiting_approval", null]);
+      assert.deepEqual([r.state.config.version, a.state, a.approval], [nextVersion, "awaiting_approval", null]);
       assert.ok(r.evidence.some((e) => e.kind === "authority.stale"));
       assert.equal(adoptConfiguration(config, next, h.state, { id: "adopt-2" }, h.liaison("member-b", s.supportRecipient), h.facts()).ok, false);
     });

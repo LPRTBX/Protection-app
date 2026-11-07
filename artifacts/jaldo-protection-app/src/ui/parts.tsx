@@ -5,9 +5,9 @@ import type { Outcome } from "../sim/session";
 /** The three honest statuses. Text carries the meaning; colour only reinforces it. */
 export type Status = "implemented" | "simulation" | "future";
 const STATUS_TEXT: Record<Status, { short: string; long: string }> = {
-  implemented: { short: "Runs the shared kernel", long: "Runs the real shared kernel in this browser" },
-  simulation: { short: "Fictional simulation", long: "Fictional simulation: invented data and stand-in systems" },
-  future: { short: "Future capability", long: "Future capability: not built, and not emulated" },
+  implemented: { short: "Prototype behaviour", long: "Prototype behaviour: runs the shared JALDO kernel in this browser" },
+  simulation: { short: "Scripted simulation", long: "Scripted simulation: invented data and stand-in systems" },
+  future: { short: "Proposed · not built", long: "Proposed live capability: not built, and not emulated here" },
 };
 
 export function StatusChip({ status }: { status: Status }) {

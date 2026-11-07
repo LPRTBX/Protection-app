@@ -2,10 +2,11 @@ import { PROTECTION } from "../config/protection-config";
 import { Panel, Disclaimer } from "./parts";
 
 const SCREENS: [string, string, string][] = [
-  ["Customer app", "Today · Protection options · Support · My updates", "Own request and approved messages only"],
-  ["Operator workspace", "Review queue · Request and source · Policies · Authority · Actions · Decisions · Record", "The request, the actions the reviewer may decide on, evidence"],
-  ["Protection Operations", "Overview · Account control · Marketing · Support · Gaps · Availability · Evidence", "Customer reference, length of break, what each system was sent"],
+  ["Customer", "Today · Protection options · Support · My updates", "Own request and approved messages only"],
+  ["Reviewer", "Review queue · Request and source · Policies · Authority · Actions · Decisions · Record", "The request, the actions the reviewer may decide on, evidence"],
+  ["Operations", "Overview · Account control · Marketing · Support · Gaps · Availability · Evidence", "Customer reference, length of break, what each system was sent"],
   ["Simulation controls", "Scenarios · Stand-in behaviour · Clock · Authority", "Directs the demonstration; not a role"],
+  ["Next time: governed learning", "Evidence timing · Dry run · Approval · Versioned simulation · Rollback · Customer summary preview", "An optional, separate scripted replay on fixed fictional evidence; not a role and not part of the journey"],
 ];
 
 const MATRIX: { who: string; may: string; mayNot: string }[] = [
@@ -20,12 +21,12 @@ const MATRIX: { who: string; may: string; mayNot: string }[] = [
 export function About() {
   return (
     <>
-      <Panel title="What Stage P1 is" status="simulation">
-        <p>JALDO Protection Stage P1 is a mobile-first prototype of one governed journey: a customer asks for a break, a person authorises specific actions, separate simulated systems apply them, and each role sees only what it needs.</p>
-        <p>It reuses the shared JALDO orchestration kernel through a configuration ({PROTECTION.id} v{PROTECTION.version}). It adds no second orchestration engine and does not claim live Core integration. The existing public Protection demonstration under /api/protection/ is untouched.</p>
+      <Panel title="What this prototype is" status="simulation">
+        <p>JALDO Protection is a mobile-first prototype of one governed journey: a customer asks for a break, a person authorises specific actions, separate simulated systems apply them, and each role sees only what it needs.</p>
+        <p>It reuses the shared JALDO orchestration kernel through a configuration ({PROTECTION.id} v{PROTECTION.version}). It adds no second orchestration engine and does not claim live Core integration. The separate coordination workspace and briefings on the JALDO site are scripted simulations of their own and are not part of this app.</p>
       </Panel>
       <Panel title="Two scenarios, one app" status="implemented">
-        <p><strong>Customer-requested break (P1)</strong> starts when the customer asks. <strong>Operator-originated early-support review (P2)</strong> starts when a fictional upstream source asks for a human review. Both use the same kernel and the same three role views. A signal never creates a restriction, and a review request is not evidence that harm occurred. See docs/protection-app/P2-design.md.</p>
+        <p><strong>Customer-requested break</strong> starts when the customer asks. <strong>Operator-originated early-support review</strong> starts when a fictional upstream source asks for a human review. Both use the same kernel and the same three role views. A signal never creates a restriction, and a review request is not evidence that harm occurred.</p>
       </Panel>
       <Panel title="Screen map" status="implemented">
         <div className="table-wrap" tabIndex={0} role="region" aria-label="Screens table, scrolls sideways on small screens">
@@ -45,12 +46,13 @@ export function About() {
           </table>
         </div>
       </Panel>
-      <Panel title="Production boundaries" status="future" intro="Not built and not emulated here. See docs/protection-app/P1-design.md for the full list.">
+      <Panel title="Production boundaries" status="future" intro="Proposed live capabilities. None is built, and none is emulated here.">
         <ul className="list">
           <li>Live JALDO Core integration, tenant-scoped storage and server-enforced permissions.</li>
           <li>Real identity, authentication and identity matching.</li>
+          <li>Server-enforced access for each role. The role-specific reviewer experience, and the navigation between roles in Explore the system, are presentation, not authentication; none of it restricts access.</li>
           <li>Verified, jurisdiction-specific help and self-exclusion information. JALDO does not perform registration.</li>
-          <li>Scenario-scoped plans, multiple request events (a source-context refresh), permissions and context freshness as kernel preconditions, and customer-requested support: kernel capabilities that do not exist yet. P2 checks them at the demo command boundary only.</li>
+          <li>Scenario-scoped plans, multiple request events (a source-context refresh), permissions and context freshness as kernel preconditions, and customer-requested support: kernel capabilities that do not exist yet. The early-support scenario checks them at the demo command boundary only.</li>
           <li>Real connectors to account controls, marketing suppression and support systems, and a real notification channel.</li>
           <li>A durable communication-permissions store and authenticated server enforcement. The check in this prototype is client-side and is not production enforcement.</li>
           <li>Expectations measured in minutes or hours (the kernel's smallest unit is one day).</li>

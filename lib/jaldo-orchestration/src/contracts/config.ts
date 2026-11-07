@@ -55,8 +55,60 @@ export const RULE_IDS = [
   "capacity-lost-after-acceptance",
   "unavailable-before-acceptance",
   "expectation-passed",
+  /** Contract 1.2: an open deadline instance reached its absolute due instant. Raised once per expiry. */
+  "deadline-passed",
 ] as const;
 export type RuleId = (typeof RULE_IDS)[number];
+
+/** Contract 1.2: what an action's response means for the lifecycle. */
+export const RESPONSE_EFFECTS = ["satisfied", "unsatisfied", "deferred"] as const;
+
+/** Action states in lifecycle order, for deadlines and prerequisites. */
+export const ORDERED_STATES = ["proposed", "awaiting_approval", "approved", "queued", "sent", "received", "accepted", "completed", "confirmed"] as const;
+export type OrderedState = (typeof ORDERED_STATES)[number];
+
+const Prerequisite = z
+  .object({
+    actionType: Id,
+    state: z.enum(PREREQUISITE_STATES),
+    /** Contract 1.2: the prerequisite must address the same recipient party as the dependent action. */
+    sameRecipient: z.boolean().optional(),
+    /** Contract 1.2: every field the dependent action discloses must be among the fields the prerequisite covers (its agreed scope). */
+    coversFields: z.boolean().optional(),
+  })
+  .strict();
+
+const Deadline = z
+  .object({
+    id: Id,
+    label: Text,
+    justification: Text,
+    /** What the deadline concerns and when it starts and is met. */
+    on: z.union([
+      z.object({ action: Id, from: z.enum(ORDERED_STATES), until: z.enum(ORDERED_STATES) }).strict(),
+      z.object({ response: Id }).strict(),
+      z.object({ followUp: z.literal(true) }).strict(),
+    ]),
+    /** Elapsed time, exactly: a day is 24 hours. Wall-clock times are converted to UTC instants by the host. */
+    afterMinutes: z.number().int().min(1).max(43_200),
+    /** Party keys that may see this deadline's time. Empty: the holder only. */
+    audience: z.array(Id).max(8),
+  })
+  .strict();
+
+const LinkKind = z
+  .object({
+    id: Id,
+    label: Text,
+    /** The party that is responsible for the work and records its status. */
+    party: Id,
+    /** Party keys that may see the link. The holder and the responsible party always may. */
+    visibleTo: z.array(Id).max(8),
+    /** `informational`: shown, never blocks. `required`: blocks the listed transitions until resolved. */
+    dependency: z.enum(["informational", "required"]),
+    blocks: z.array(z.object({ actionType: Id, at: z.enum(["approval", "release", "completion", "confirmation"]) }).strict()).max(8),
+  })
+  .strict();
 
 const Party = z
   .object({
@@ -94,12 +146,33 @@ const ActionTypeDef = z
     proposableWhen: z.enum(["always", "recommendation"]),
     outcomes: z.array(z.object({ id: Id, label: Text }).strict()).max(8),
     /** Other actions in this coordination that must reach a state before this one may be executed. */
-    prerequisites: z.array(z.object({ actionType: Id, state: z.enum(PREREQUISITE_STATES) }).strict()).max(4),
+    prerequisites: z.array(Prerequisite).max(4),
+    /**
+     * Contract 1.2 (opt-in). Prerequisites that must hold when this action is APPROVED, not only when it is released.
+     * Absent means approval is not gated by prerequisites (1.1 behaviour).
+     */
+    approvalPrerequisites: z.array(Prerequisite).max(4).optional(),
+    /**
+     * Contract 1.2 (opt-in). Strict prerequisite validity, at approval and at release: a prerequisite counts only while
+     * it is in the same plan version (under `planVersioning`) and its recipient has not lost capacity since accepting.
+     * A renewed check is a new action of the same type. Absent keeps 1.1 behaviour.
+     */
+    revalidatePrerequisites: z.boolean().optional(),
+    /** Contract 1.2 (opt-in, needs `revalidatePrerequisites`). An approved, unreleased action returns to awaiting approval when a prerequisite stops being valid. */
+    withdrawApprovalOnLoss: z.boolean().optional(),
+    /** Contract 1.2 (opt-in). The subject's own reports on completed work. Not a score, never free text. */
+    responses: z.array(z.object({ id: Id, label: Text, effect: z.enum(RESPONSE_EFFECTS) }).strict()).min(1).max(6).optional(),
     /**
      * Standing authority: the configured policy itself authorises execution,
      * so no per-action human approval is needed. Only valid for actions that
      * disclose nothing from the request to anyone but the subject (checked).
      */
+    /**
+     * Contract 1.3 (opt-in; B8). When the subject sees the holder's workflow records for an action that concerns them.
+     * `submission` (default, the 1.2 behaviour): from `action.submitted`. `release`: only from `disclosure.made`; nothing before it, and the earlier records
+     * stay hidden afterwards. Narrows the subject's audience only. Not allowed where the subject approves the action.
+     */
+    subjectSeesFrom: z.enum(["submission", "release"]).optional(),
     standingAuthority: z.boolean(),
     /** Evidence kinds that must exist before assurance treats this action as fully evidenced. */
     evidenceRequired: z.array(z.enum(EVIDENCE_KINDS)).max(12),
@@ -184,6 +257,14 @@ const ConfigShape = z
       })
       .strict(),
     execution: z.object({ maxAttempts: z.number().int().min(1).max(5) }).strict(),
+    /** Contract 1.2 (all opt-in). */
+    planVersioning: z.boolean().optional(),
+    /** Reasons a holder may give for revising a plan or changing a deadline. Ids only; no free text. */
+    changeReasons: z.array(z.object({ id: Id, label: Text }).strict()).min(1).max(8).optional(),
+    deadlines: z.array(Deadline).max(8).optional(),
+    /** How a holder closes a follow-up opened by an unsatisfied response. */
+    followUpOutcomes: z.array(z.object({ id: Id, label: Text }).strict()).min(1).max(8).optional(),
+    linkKinds: z.array(LinkKind).max(8).optional(),
     automation: z.object({ operations: z.array(z.enum(AUTOMATION_OPERATIONS)).max(AUTOMATION_OPERATIONS.length) }).strict(),
     measures: z
       .object({ illustrativeMinutes: z.record(z.string(), z.number().int().min(0).max(240)), assumption: Text })
@@ -254,9 +335,17 @@ function semanticIssues(p: DeploymentConfiguration): string[] {
       }
     }
     dup(`field in action "${a.id}"`, a.fields.map((f) => f.id));
-    for (const pre of a.prerequisites) {
+    for (const pre of [...a.prerequisites, ...(a.approvalPrerequisites ?? [])]) {
       if (!actionIds.has(pre.actionType)) issues.push(`action "${a.id}" depends on unknown action "${pre.actionType}"`);
       if (pre.actionType === a.id) issues.push(`action "${a.id}" depends on itself`);
+    }
+    if (a.subjectSeesFrom === "release" && a.approver === "subject") issues.push(`action "${a.id}": subjectSeesFrom "release" is not allowed when the subject approves it (they could not act on what they cannot see)`);
+    if (a.withdrawApprovalOnLoss && !a.revalidatePrerequisites) issues.push(`action "${a.id}": withdrawApprovalOnLoss needs revalidatePrerequisites`);
+    if (a.responses) {
+      dup(`response in action "${a.id}"`, a.responses.map((r) => r.id));
+      if (a.responses.some((r) => r.effect === "unsatisfied") && !(p.followUpOutcomes && p.followUpOutcomes.length > 0)) {
+        issues.push(`action "${a.id}" has an unsatisfied response but no followUpOutcomes are configured`);
+      }
     }
     if (a.standingAuthority) {
       const disclosesRequest = a.fields.some((f) => "requestField" in f.source);
@@ -268,7 +357,7 @@ function semanticIssues(p: DeploymentConfiguration): string[] {
     }
   }
   // Prerequisite cycles.
-  const deps = new Map(p.actions.map((a) => [a.id, a.prerequisites.map((x) => x.actionType)]));
+  const deps = new Map(p.actions.map((a) => [a.id, [...a.prerequisites, ...(a.approvalPrerequisites ?? [])].map((x) => x.actionType)]));
   const visiting = new Set<string>();
   const done = new Set<string>();
   const visit = (id: string): boolean => {
@@ -296,6 +385,35 @@ function semanticIssues(p: DeploymentConfiguration): string[] {
     expectationTypes.add(e.actionType);
   }
 
+  dup("change reason", (p.changeReasons ?? []).map((x) => x.id));
+  dup("follow-up outcome", (p.followUpOutcomes ?? []).map((x) => x.id));
+  const defs = p.deadlines ?? [];
+  dup("deadline", defs.map((d) => d.id));
+  if ((p.planVersioning || defs.length > 0) && !(p.changeReasons && p.changeReasons.length > 0)) issues.push("planVersioning and deadlines need changeReasons");
+  for (const d of defs) {
+    if ("action" in d.on) {
+      if (!actionIds.has(d.on.action)) issues.push(`deadline "${d.id}" names unknown action "${d.on.action}"`);
+      if (ORDERED_STATES.indexOf(d.on.from) >= ORDERED_STATES.indexOf(d.on.until)) issues.push(`deadline "${d.id}": "until" must come after "from"`);
+    } else if ("response" in d.on) {
+      const t = p.actions.find((a) => a.id === (d.on as { response: string }).response);
+      if (!t) issues.push(`deadline "${d.id}" names unknown action "${(d.on as { response: string }).response}"`);
+      else if (!t.responses) issues.push(`deadline "${d.id}" waits for a response but "${t.id}" configures none`);
+    } else if (!p.actions.some((a) => a.responses?.some((r) => r.effect === "unsatisfied"))) {
+      issues.push(`deadline "${d.id}" is for a follow-up but no response can open one`);
+    }
+    for (const k of d.audience) if (!parties.has(k)) issues.push(`deadline "${d.id}" audience names unknown party "${k}"`);
+  }
+  dup("link kind", (p.linkKinds ?? []).map((k) => k.id));
+  for (const k of p.linkKinds ?? []) {
+    const lp = parties.get(k.party);
+    if (!lp) issues.push(`link kind "${k.id}" names unknown party "${k.party}"`);
+    else if (lp.kind === "subject") issues.push(`link kind "${k.id}": the subject cannot be the responsible party`);
+    for (const v of k.visibleTo) if (!parties.has(v)) issues.push(`link kind "${k.id}" names unknown visible party "${v}"`);
+    if (k.dependency === "informational" && k.blocks.length > 0) issues.push(`link kind "${k.id}" is informational and cannot block anything`);
+    if (k.dependency === "required" && k.blocks.length === 0) issues.push(`link kind "${k.id}" is required but blocks nothing`);
+    for (const b of k.blocks) if (!actionIds.has(b.actionType)) issues.push(`link kind "${k.id}" blocks unknown action "${b.actionType}"`);
+  }
+
   const rec = p.recognition;
   for (const t of rec.plan) if (!actionIds.has(t)) issues.push(`plan names unknown action "${t}"`);
   for (const rule of rec.rules) if (!rec.wording[rule]) issues.push(`recognition rule "${rule}" has no wording`);
@@ -304,6 +422,7 @@ function semanticIssues(p: DeploymentConfiguration): string[] {
     if (!rec.initialResponse) issues.push(`"request-awaiting" needs recognition.initialResponse`);
     else if (!actionIds.has(rec.initialResponse)) issues.push(`initialResponse names unknown action "${rec.initialResponse}"`);
   }
+  if (rec.rules.includes("deadline-passed") && defs.length === 0) issues.push(`"deadline-passed" is enabled but no deadline is configured`);
   if (rec.rules.includes("expectation-passed") && p.expectations.length === 0) issues.push(`"expectation-passed" is enabled but no expectation is configured`);
   const recoveryTypes = new Set<string>();
   for (const m of rec.recovery) {

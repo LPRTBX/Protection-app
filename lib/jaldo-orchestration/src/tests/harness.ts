@@ -43,6 +43,8 @@ export class Harness {
   unavailable = new Set<string>();
   eligibleHolders: string[] = ["member-a", "member-b", "member-c"];
   executor: Executor | undefined;
+  /** Contract 1.1: "queue" makes execute commit a dispatch intent instead of executing inline. */
+  dispatch: "inline" | "queue" | undefined;
   private n = 0;
   readonly holderRole: string;
   readonly liaisonRole: string;
@@ -106,7 +108,10 @@ export class Harness {
   }
   /** A member who may record a party's response on its behalf. */
   liaison(id: string, onBehalfOf: string): Actor {
-    return { kind: "member", id, coreRole: "operator", scope: SCOPE, grants: [grant(this.liaisonRole)], onBehalfOf };
+    // A configuration may split party responses and capacity across separate responsibilities
+    // (e.g. sport-safeguarding); the test liaison carries each responsibility the scenario needs.
+    const roles = [...new Set([this.liaisonRole, roleWith(this.config, "record-capacity")])];
+    return { kind: "member", id, coreRole: "operator", scope: SCOPE, grants: roles.map((r) => grant(r)), onBehalfOf };
   }
   get system(): Actor {
     return { kind: "system", scope: SCOPE };
@@ -116,7 +121,7 @@ export class Harness {
   }
 
   facts(): Facts {
-    return { now: this.now, unavailable: this.unavailable, eligibleHolders: this.eligibleHolders, ...(this.executor ? { executor: this.executor } : {}) };
+    return { now: this.now, unavailable: this.unavailable, eligibleHolders: this.eligibleHolders, ...(this.executor ? { executor: this.executor } : {}), ...(this.dispatch ? { dispatch: this.dispatch } : {}) };
   }
 
   advanceDays(days: number) {

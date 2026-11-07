@@ -47,8 +47,8 @@ export const FICTIONAL_NOTES = [
 
 // ───────────── P2: operator-originated early-support review ─────────────
 export const SCENARIOS = [
-  { id: "customer-break", label: "Customer-requested break", tag: "P1, unchanged", detail: "The customer asks for a break. A person authorises each account and marketing action." },
-  { id: "early-support", label: "Operator-originated early-support review", tag: "P2", detail: "A fictional upstream source asks for a human early-support review. Nothing is applied to anyone's account." },
+  { id: "customer-break", label: "Customer-requested break", tag: "Recommended", detail: "The customer asks for a break. A person authorises each account and marketing action." },
+  { id: "early-support", label: "Operator-originated early-support review", tag: "Separate scenario", detail: "A fictional upstream source asks for a human early-support review. Nothing is applied to anyone's account." },
 ] as const;
 export type ScenarioId = (typeof SCENARIOS)[number]["id"];
 

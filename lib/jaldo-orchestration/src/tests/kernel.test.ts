@@ -12,8 +12,9 @@ import {
   recognise,
   recogniseMoment,
   subjectView,
+  JALDO_ORCHESTRATION_CONTRACT_VERSION,
 } from "../index";
-import { REFERENCE_CONFIGURATIONS } from "../deployments";
+import { PORTABILITY_CONFIGURATIONS, REFERENCE_CONFIGURATIONS } from "../deployments";
 import { ACCEPT3, CHECKS4, Harness, satisfyPrerequisites, shape, supportAccepted } from "./harness";
 
 /**
@@ -22,13 +23,14 @@ import { ACCEPT3, CHECKS4, Harness, satisfyPrerequisites, shape, supportAccepted
  * Nothing in this file names an industry, role or service.
  */
 
-for (const config of Object.values(REFERENCE_CONFIGURATIONS)) {
+// Every reference configuration AND the Stage 6B.2 portability configurations, unchanged (ADR-0037 D-7).
+for (const config of [...Object.values(REFERENCE_CONFIGURATIONS), ...Object.values(PORTABILITY_CONFIGURATIONS)]) {
   const s = shape(config);
 
   describe(`orchestration kernel — ${config.id}@${config.version}`, () => {
     it("pins contract, configuration and scope on the coordination and evidences the permitted event", () => {
       const h = new Harness(config);
-      assert.equal(h.state.contractVersion, "1.0.0");
+      assert.equal(h.state.contractVersion, JALDO_ORCHESTRATION_CONTRACT_VERSION, "a coordination records the contract it was created under");
       assert.deepEqual(h.state.config, { id: config.id, version: config.version });
       assert.deepEqual(h.state.scope, { organisationId: "org-1", deploymentId: "dep-1" });
       assert.deepEqual(h.evidence.map((e) => e.kind), ["event.recorded", "request.opened"]);

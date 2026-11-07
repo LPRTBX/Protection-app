@@ -15,6 +15,7 @@ import type {
   CommandEnvelope,
   CoordinationState,
   Executor,
+  ExecutionResult,
   Facts,
   FrozenField,
   GovernedAction,
@@ -23,8 +24,9 @@ import type {
 } from "../contracts/orchestration";
 import { JALDO_ORCHESTRATION_CONTRACT_VERSION } from "../version";
 import { actorRecord, evaluateAuthority, evaluateExecutionAuthority, isMemberSelf, partyMayAct, strengthOf } from "./authority";
-import { holderOf, isLive, ownerOf, recipientEligible, recipientUnavailable } from "./predicates";
+import { holderOf, isLive, ownerOf, recipientEligible, recipientUnavailable, unmetPrerequisites } from "./predicates";
 import { activeRecommendation, fieldsFor, syncMoments } from "./recognition";
+import { extensionCommand, linkBlockers, settleExtensions } from "./extensions";
 
 /**
  * The orchestration kernel's state transitions. Pure and deterministic given
@@ -48,6 +50,10 @@ export function subjectConcerned(config: DeploymentConfiguration, type: ActionTy
   return type.approver === "subject" || type.confirmer === "subject" || type.recipient === s;
 }
 const subjectSees = (config: DeploymentConfiguration, type: ActionTypeDefinition) => (subjectConcerned(config, type) ? [subjectAudience(config)] : []);
+/** Contract 1.3 (B8). Before release, a type set to `subjectSeesFrom: "release"` is invisible to the subject. Narrows the audience only; the release records themselves use `actionAudience`. */
+const subjectSeesBeforeRelease = (type: ActionTypeDefinition) => type.subjectSeesFrom !== "release";
+const subjectSeesFor = (config: DeploymentConfiguration, type: ActionTypeDefinition, a: { sentAt: string | null }) =>
+  a.sentAt === null && !subjectSeesBeforeRelease(type) ? [] : subjectSees(config, type);
 const actionAudience = (config: DeploymentConfiguration, type: ActionTypeDefinition) =>
   [...new Set(["holder", `party:${type.recipient}`, ...subjectSees(config, type)])];
 
@@ -197,6 +203,7 @@ export function openCoordination(
     processedEvents: [eventKey(event)],
     processedCommands: [],
     sequence: 0,
+    ...(config.planVersioning ? { planVersion: 1 } : {}),
   };
   return seal(
     config,
@@ -253,7 +260,13 @@ export function ingestEvent(config: DeploymentConfiguration, state: Coordination
   const hit = base.actions.filter((a) => a.recipient === key && ["sent", "received"].includes(a.state) && !a.heldBack);
   const lost = base.actions.filter((a) => a.recipient === key && a.state === "accepted" && !a.heldBack);
   if (hit.length === 0 && lost.length === 0) return { ok: true, duplicate: false, state: base, evidence: [] };
-  const next = { ...base, actions: base.actions.map((a) => (hit.includes(a) ? { ...a, state: "unresolved" as const, gap: { kind: "recipient_unavailable" as const, at } } : a)) };
+  const mark = config.actions.some((t) => t.revalidatePrerequisites);
+  const next = {
+    ...base,
+    actions: base.actions.map((a) =>
+      hit.includes(a) ? { ...a, state: "unresolved" as const, gap: { kind: "recipient_unavailable" as const, at } } : mark && lost.includes(a) ? { ...a, capacityLostAt: at } : a,
+    ),
+  };
   const drafts: Draft[] = [
     ...hit.map((a): Draft => {
       const t = actionTypeOf(config, a.typeId);
@@ -261,10 +274,11 @@ export function ingestEvent(config: DeploymentConfiguration, state: Coordination
     }),
     ...lost.map((a): Draft => {
       const t = actionTypeOf(config, a.typeId);
-      return { kind: "capacity.lost", actionId: a.id, audience: ["holder", ...subjectSees(config, t)], text: `${party.label} is recorded as no longer able to act on ${t.short} (${a.id}). Its acceptance is kept as recorded; the need is unresolved. Nothing was passed to anyone else.` };
+      return { kind: "capacity.lost", actionId: a.id, audience: ["holder", ...subjectSeesFor(config, t, a)], text: `${party.label} is recorded as no longer able to act on ${t.short} (${a.id}). Its acceptance is kept as recorded; the need is unresolved. Nothing was passed to anyone else.` };
     }),
   ];
-  return seal(config, state, { state: next, drafts }, actor, facts, { command: null, commandId: null, eventId: event.id });
+  const settled = settleExtensions(config, next, facts);
+  return seal(config, state, { state: settled.state, drafts: [...drafts, ...settled.drafts] }, actor, facts, { command: null, commandId: null, eventId: event.id });
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -272,16 +286,83 @@ export function ingestEvent(config: DeploymentConfiguration, state: Coordination
 // ─────────────────────────────────────────────────────────────────────────
 
 /** Records a simulated delivery: the disclosure is recorded and nothing leaves the system. */
+
+/**
+ * The outcome of one execution attempt, shared by contract 1.0 inline execution and contract 1.1
+ * `recordDispatchResult`. The three branches are the original 1.0 text and effects, unchanged.
+ */
+function executionOutcome(
+  config: DeploymentConfiguration,
+  patch: (id: string, fn: (a: GovernedAction) => GovernedAction) => CoordinationState,
+  a: GovernedAction,
+  type: ReturnType<typeof actionTypeOf>,
+  key: string,
+  priorAttempts: GovernedAction["attempts"],
+  result: ExecutionResult,
+  disclosure: NonNullable<GovernedAction["disclosure"]>,
+  recipient: string,
+  recipientLabel: string,
+  policy: ReturnType<typeof policyOf>,
+  actor: Actor,
+  facts: Facts,
+  at: string,
+): Inner {
+  const n = priorAttempts.length + 1;
+      if (result.status === "uncertain") {
+        // Possibly delivered: keep the disclosure on record (it may have happened), never retry, never call it sent.
+        return {
+          ok: true,
+          state: patch(a.id, (r) => ({ ...r, state: "unresolved", gap: { kind: "dispatch_uncertain", at }, disclosure, recipient: recipient, attempts: [...priorAttempts, { key, at, result: "uncertain", reason: result.reason, reference: null }] })),
+          drafts: [
+            { kind: "execution.uncertain", actionId: a.id, audience: ["holder"], text: `Execution attempt ${n} for ${type.short} (${a.id}) has an unknown outcome (${result.reason}). It may have reached ${recipientLabel}; it is not recorded as sent and will not be retried until a person reconciles it.` },
+            { kind: "responsibility.unresolved", actionId: a.id, audience: ["holder"], text: `${type.short} (${a.id}) needs reconciliation: confirm with ${recipientLabel} whether it arrived before anything else happens.` },
+          ],
+        };
+      }
+      if (result.status === "failed") {
+        const attempts = [...priorAttempts, { key, at, result: "failed" as const, reason: result.reason, reference: null }];
+        const exhausted = !result.retryable || attempts.length >= config.execution.maxAttempts;
+        return {
+          ok: true,
+          state: patch(a.id, (r) => ({ ...r, attempts, ...(exhausted ? { state: "unresolved" as const, gap: { kind: "execution_failed" as const, at } } : {}) })),
+          drafts: [
+            { kind: "execution.failed", actionId: a.id, audience: ["holder"], text: `Execution attempt ${attempts.length} for ${type.short} (${a.id}) failed (${result.reason}). Nothing is recorded as sent.` },
+            ...(exhausted ? [{ kind: "responsibility.unresolved" as const, actionId: a.id, audience: ["holder"], text: `${type.short} (${a.id}) could not be executed. It is unresolved and a person decides what happens next.` }] : []),
+          ],
+        };
+      }
+      const labels = a.fields.map((f) => f.label).join(", ");
+      return {
+        ok: true,
+        state: patch(a.id, (r) => ({ ...r, state: "sent", recipient: recipient, sentAt: at, disclosure, attempts: [...priorAttempts, { key, at, result: "delivered", reason: null, reference: result.reference }] })),
+        drafts: [
+          { kind: "execution.attempted", actionId: a.id, audience: ["holder"], text: `Execution attempt ${n} for ${type.short} (${a.id}) was recorded as delivered.${facts.executor ? "" : " Simulation: nothing left the system."}`, strength: actor.kind === "system" ? "standing-policy" : undefined },
+          {
+            kind: "disclosure.made",
+            actionId: a.id,
+            audience: actionAudience(config, type),
+            text: `${type.short} (${a.id}) was sent to ${recipientLabel}. Purpose: ${type.purpose} Fields disclosed: ${labels}. Authority basis: ${type.authority.label}. Policy: ${policy.label} (${policy.version}). Sending is not receipt.`,
+            recipientText: `${type.short} was sent to you. Purpose: ${type.purpose} Fields disclosed to you: ${labels}. Authority basis: ${type.authority.label}. Anything not listed is not shared with you.`,
+            strength: actor.kind === "system" ? "standing-policy" : undefined,
+          },
+        ],
+      };
+}
+
 export const recordOnlyExecutor: Executor = () => ({ status: "delivered", reference: null });
+
+/** Contract 1.2: a party responsible for work linked to this request has standing to record that work's status. */
+const linkedParty = (config: DeploymentConfiguration, state: CoordinationState, key: string) =>
+  (state.links ?? []).some((l) => !l.withdrawn && config.linkKinds?.find((k) => k.id === l.kindId)?.party === key);
 
 /** Whether the actor has any standing in this coordination. Strangers get `not_found`, never a reason that reveals it exists. */
 function related(config: DeploymentConfiguration, state: CoordinationState, actor: Actor): boolean {
   if (actor.scope.organisationId !== state.scope.organisationId || actor.scope.deploymentId !== state.scope.deploymentId) return false;
   if (actor.kind === "system") return true;
   if (actor.kind === "party") {
-    return actor.key === subjectOf(config).key || state.actions.some((a) => a.recipient === actor.key && a.sentAt !== null && !a.heldBack);
+    return actor.key === subjectOf(config).key || state.actions.some((a) => a.recipient === actor.key && a.sentAt !== null && !a.heldBack) || linkedParty(config, state, actor.key);
   }
-  if (actor.onBehalfOf) return state.actions.some((a) => a.recipient === actor.onBehalfOf && a.sentAt !== null && !a.heldBack) || actor.onBehalfOf === subjectOf(config).key;
+  if (actor.onBehalfOf) return state.actions.some((a) => a.recipient === actor.onBehalfOf && a.sentAt !== null && !a.heldBack) || actor.onBehalfOf === subjectOf(config).key || linkedParty(config, state, actor.onBehalfOf);
   return actor.id === holderOf(state);
 }
 
@@ -306,7 +387,8 @@ export function applyCommand(config: DeploymentConfiguration, state: Coordinatio
   }
   const inner = handle(config, state, envelope.command, actor, facts);
   if (!inner.ok) return inner;
-  return seal(config, state, { state: { ...inner.state, processedCommands: [...state.processedCommands, envelope.id] }, drafts: inner.drafts }, actor, facts, {
+  const settled = settleExtensions(config, inner.state, facts);
+  return seal(config, state, { state: { ...settled.state, processedCommands: [...state.processedCommands, envelope.id] }, drafts: [...inner.drafts, ...settled.drafts] }, actor, facts, {
     command: envelope.command.type,
     commandId: envelope.id,
     eventId: null,
@@ -348,7 +430,7 @@ export function adoptConfiguration(
     { kind: "configuration.adopted", actionId: null, audience: ["holder"], text: `The coordination moved from configuration ${current.version} to ${next.version}.` },
     ...stale.map((a): Draft => {
       const t = actionTypeOf(next, a.typeId);
-      return { kind: "authority.stale", actionId: a.id, audience: ["holder", ...subjectSees(next, t)], text: `The approval for ${t.short} (${a.id}) was given under an earlier configuration. A fresh approval is required before anything is sent.` };
+      return { kind: "authority.stale", actionId: a.id, audience: ["holder", ...subjectSeesFor(next, t, a)], text: `The approval for ${t.short} (${a.id}) was given under an earlier configuration. A fresh approval is required before anything is sent.` };
     }),
   ];
   return seal(next, state, { state: moved, drafts }, actor, facts, { command: "adoptConfiguration", commandId: envelope.id, eventId: null });
@@ -372,6 +454,9 @@ function handle(config: DeploymentConfiguration, s: CoordinationState, cmd: Comm
     if (owner === null) return ownerOnly();
     return may(op);
   };
+
+  const ext = extensionCommand(config, s, cmd, actor, facts);
+  if (ext) return ext;
 
   switch (cmd.type) {
     case "acceptRequest": {
@@ -422,7 +507,8 @@ function handle(config: DeploymentConfiguration, s: CoordinationState, cmd: Comm
       if (cmd.fromRecommendation && (!rec || rec.pathway?.actionType !== type.id)) return refuse("not_recommended", "That recommendation is not currently active for this pathway.");
       if (type.proposableWhen === "recommendation" && !rec) return refuse("not_recommended", "This action can only be opened by adopting a current recommendation.");
       if (actor.kind === "system" && !config.recognition.plan.includes(type.id)) return refuse("not_permitted", "The kernel prepares only configured plan steps.");
-      if (s.actions.some((a) => a.typeId === type.id && isLive(a) && !a.heldBack)) return refuse("already_open", "An action of this type is already open.");
+      // Work of an earlier plan version, or an acceptance whose recipient later lost capacity (opt-in), does not occupy the slot: it stays on record and the renewal is a new action.
+      if (s.actions.some((a) => a.typeId === type.id && isLive(a) && !a.heldBack && !a.capacityLostAt && (!config.planVersioning || (a.planVersion ?? 1) === (s.planVersion ?? 1)))) return refuse("already_open", "An action of this type is already open.");
       const epoch = s.routedFrom.length === 0 ? "" : String.fromCharCode(65 + s.routedFrom.length);
       const stem = `${type.ref}-${epoch}`;
       const id = `${stem}${s.actions.filter((a) => a.id.startsWith(stem) && /^\d+$/.test(a.id.slice(stem.length))).length + 1}`;
@@ -450,6 +536,7 @@ function handle(config: DeploymentConfiguration, s: CoordinationState, cmd: Comm
         confirmedBy: null,
         withdrawal: null,
         heldBack: false,
+        ...(config.planVersioning ? { planVersion: s.planVersion ?? 1 } : {}),
         origin: rec ? rec.id : null,
         recovers: rec && rec.actionId && (rec.ruleId === "capacity-lost-after-acceptance" || rec.ruleId === "unavailable-before-acceptance") ? rec.actionId : null,
       };
@@ -495,7 +582,7 @@ function handle(config: DeploymentConfiguration, s: CoordinationState, cmd: Comm
           return {
             ok: true,
             state: patch(a.id, (r) => ({ ...r, state: "unresolved", recipient: null, gap: { kind: "no_recipient", at } })),
-            drafts: [{ kind: "responsibility.unresolved", actionId: a.id, audience: ["holder", ...subjectSees(config, type)], text: `${type.short} (${a.id}) could not be submitted: no authorised recipient is available. No substitute is chosen.` }],
+            drafts: [{ kind: "responsibility.unresolved", actionId: a.id, audience: ["holder", ...subjectSeesFor(config, type, a)], text: `${type.short} (${a.id}) could not be submitted: no authorised recipient is available. No substitute is chosen.` }],
           };
         }
         if (type.standingAuthority) {
@@ -503,13 +590,13 @@ function handle(config: DeploymentConfiguration, s: CoordinationState, cmd: Comm
           return {
             ok: true,
             state: patch(a.id, (r) => ({ ...r, state: "approved", recipient: el.key, submitted: true, approval: { by, attested: false, basis: "standing-policy", configVersion: config.version, at } })),
-            drafts: [{ kind: "approval.recorded", actionId: a.id, audience: ["holder", ...subjectSees(config, type)], text: `${type.short} (${a.id}) is authorised by standing policy ${policyOf(config, type.policy).label} (${policyOf(config, type.policy).version}). It discloses nothing from the request to anyone but the person. It has not been sent.`, strength: "standing-policy" }],
+            drafts: [{ kind: "approval.recorded", actionId: a.id, audience: ["holder", ...subjectSeesFor(config, type, a)], text: `${type.short} (${a.id}) is authorised by standing policy ${policyOf(config, type.policy).label} (${policyOf(config, type.policy).version}). It discloses nothing from the request to anyone but the person. It has not been sent.`, strength: "standing-policy" }],
           };
         }
         return {
           ok: true,
           state: patch(a.id, (r) => ({ ...r, state: "awaiting_approval", recipient: el.key, submitted: true })),
-          drafts: [{ kind: "action.submitted", actionId: a.id, audience: ["holder", ...subjectSees(config, type)], text: `${type.short} (${a.id}) was submitted for approval by ${type.approver === "subject" ? subjectOf(config).label : "the holder"}.` }],
+          drafts: [{ kind: "action.submitted", actionId: a.id, audience: ["holder", ...subjectSeesFor(config, type, a)], text: `${type.short} (${a.id}) was submitted for approval by ${type.approver === "subject" ? subjectOf(config).label : "the holder"}.` }],
         };
       }
       if (cmd.type === "withdraw") {
@@ -518,7 +605,7 @@ function handle(config: DeploymentConfiguration, s: CoordinationState, cmd: Comm
         return {
           ok: true,
           state: patch(a.id, (r) => ({ ...r, state: "withdrawn", withdrawal: { at, reason: "holder" } })),
-          drafts: [{ kind: "action.withdrawn", actionId: a.id, audience: ["holder", ...(a.submitted ? subjectSees(config, type) : [])], text: `The holder withdrew ${type.short} (${a.id}). Nothing was sent.` }],
+          drafts: [{ kind: "action.withdrawn", actionId: a.id, audience: ["holder", ...(a.submitted ? subjectSeesFor(config, type, a) : [])], text: `The holder withdrew ${type.short} (${a.id}). Nothing was sent.` }],
         };
       }
       if (actor.kind === "system") return refuse("not_permitted", "Only a person re-checks unresolved work.");
@@ -556,26 +643,30 @@ function handle(config: DeploymentConfiguration, s: CoordinationState, cmd: Comm
         return {
           ok: true,
           state: patch(a.id, (r) => ({ ...r, state: "withdrawn", withdrawal: { at, reason: "approval_revoked" } })),
-          drafts: [{ kind: "approval.revoked", actionId: a.id, audience: ["holder", ...subjectSees(config, type)], text: `${who} revoked the approval for ${type.short} (${a.id}) before anything was sent. Nothing will be sent.` }],
+          drafts: [{ kind: "approval.revoked", actionId: a.id, audience: ["holder", ...subjectSeesFor(config, type, a)], text: `${who} revoked the approval for ${type.short} (${a.id}) before anything was sent. Nothing will be sent.` }],
         };
       }
       if (a.state !== "awaiting_approval") return refuse("invalid_state", "This action is not awaiting approval.");
       if (cmd.type === "refuse") {
-        return { ok: true, state: patch(a.id, (r) => ({ ...r, state: "not_approved" })), drafts: [{ kind: "approval.refused", actionId: a.id, audience: ["holder", ...subjectSees(config, type)], text: `${who} did not approve ${type.short} (${a.id}). Nothing was sent.` }] };
+        return { ok: true, state: patch(a.id, (r) => ({ ...r, state: "not_approved" })), drafts: [{ kind: "approval.refused", actionId: a.id, audience: ["holder", ...subjectSeesFor(config, type, a)], text: `${who} did not approve ${type.short} (${a.id}). Nothing was sent.` }] };
       }
       if (!all4(cmd.checks)) return refuse("checks_required", "Approval needs the recipient, purpose, exact fields and authority checks.");
+      {
+        const waiting = [...unmetPrerequisites(config, s, type.id, a, "approval"), ...linkBlockers(config, s, type.id, "approval")];
+        if (waiting.length > 0) return refuse("dependency_unmet", `Waiting for: ${waiting.join(", ")}. Approval needs these first.`);
+      }
       const el = recipientEligible(config, type.id, facts);
       if (!el.ok) {
         return {
           ok: true,
           state: patch(a.id, (r) => ({ ...r, state: "unresolved", recipient: null, gap: { kind: "no_recipient", at } })),
-          drafts: [{ kind: "responsibility.unresolved", actionId: a.id, audience: ["holder", ...subjectSees(config, type)], text: `${type.short} (${a.id}) could not be approved: no authorised recipient is available.` }],
+          drafts: [{ kind: "responsibility.unresolved", actionId: a.id, audience: ["holder", ...subjectSeesFor(config, type, a)], text: `${type.short} (${a.id}) could not be approved: no authorised recipient is available.` }],
         };
       }
       return {
         ok: true,
         state: patch(a.id, (r) => ({ ...r, state: "approved", recipient: el.key, approval: { by, attested, basis: "person", configVersion: config.version, at } })),
-        drafts: [{ kind: "approval.recorded", actionId: a.id, audience: ["holder", ...subjectSees(config, type)], text: `${who} approved ${type.short} (${a.id}) for ${partyOf(config, el.key).label}, after checking the recipient, purpose, exact fields and authority basis.${attested ? " Recorded on their behalf by a member (attested)." : ""} It has not been sent.` }],
+        drafts: [{ kind: "approval.recorded", actionId: a.id, audience: ["holder", ...subjectSeesFor(config, type, a)], text: `${who} approved ${type.short} (${a.id}) for ${partyOf(config, el.key).label}, after checking the recipient, purpose, exact fields and authority basis.${attested ? " Recorded on their behalf by a member (attested)." : ""} It has not been sent.` }],
       };
     }
 
@@ -584,6 +675,8 @@ function handle(config: DeploymentConfiguration, s: CoordinationState, cmd: Comm
       if (!a) return refuse("not_found", "No such action.");
       if (a.state !== "approved") return refuse("invalid_state", a.sentAt ? "This action has already been executed." : "Only an approved action can be executed.");
       const type = actionTypeOf(config, a.typeId);
+      const blockedByLinks = linkBlockers(config, s, type.id, "release");
+      if (blockedByLinks.length > 0) return refuse("dependency_unmet", `Waiting for: ${blockedByLinks.join(", ")}.`);
       const decision = evaluateExecutionAuthority(config, s, a, actor, now);
       if (decision.outcome === "human_review_required") return refuse("stale_authority", `${decision.reasons.join(" ")} Required: ${decision.requiredApprovals.join(", ")}.`);
       if (decision.outcome === "denied") {
@@ -594,53 +687,56 @@ function handle(config: DeploymentConfiguration, s: CoordinationState, cmd: Comm
         return {
           ok: true,
           state: patch(a.id, (r) => ({ ...r, state: "unresolved", recipient: null, gap: { kind: "no_recipient", at } })),
-          drafts: [{ kind: "responsibility.unresolved", actionId: a.id, audience: ["holder", ...subjectSees(config, type)], text: `${type.short} (${a.id}) was not executed: no authorised recipient is available. No substitute is chosen.` }],
+          drafts: [{ kind: "responsibility.unresolved", actionId: a.id, audience: ["holder", ...subjectSeesFor(config, type, a)], text: `${type.short} (${a.id}) was not executed: no authorised recipient is available. No substitute is chosen.` }],
         };
       }
       const policy = policyOf(config, type.policy);
       const recipientLabel = partyOf(config, el.key).label;
       const disclosure = { recipient: el.key, recipientLabel, purpose: type.purpose, authority: type.authority.label, policy: { id: policy.id, version: policy.version }, fields: a.fields, withheld: type.withheld, at };
       const key = `${a.id}#${a.attempts.length + 1}`;
+      if (facts.dispatch === "queue") {
+        // Contract 1.1: freeze the disclosure and commit a dispatch intent. Nothing has been sent.
+        return {
+          ok: true,
+          state: patch(a.id, (r) => ({ ...r, state: "queued", recipient: el.key, disclosure, attempts: [...r.attempts, { key, at, result: "queued", reason: null, reference: null }] })),
+          drafts: [
+            { kind: "execution.queued", actionId: a.id, audience: ["holder"], text: `${type.short} (${a.id}) is approved and queued for dispatch to ${recipientLabel} (attempt ${a.attempts.length + 1}). Queued is not sent.`, strength: actor.kind === "system" ? "standing-policy" : undefined },
+          ],
+        };
+      }
       const result = (facts.executor ?? recordOnlyExecutor)({ key, actionId: a.id, actionType: type.id, recipient: el.key, disclosure });
-      if (result.status === "uncertain") {
-        // Possibly delivered: keep the disclosure on record (it may have happened), never retry, never call it sent.
+      return executionOutcome(config, patch, a, type, key, a.attempts, result, disclosure, el.key, recipientLabel, policy, actor, facts, at);
+    }
+
+    case "recordDispatchResult": {
+      // Contract 1.1, system only: the dispatcher records what actually happened to a queued attempt.
+      if (actor.kind !== "system") return refuse("not_permitted", "Only the dispatcher records a dispatch result.");
+      const a = find(cmd.actionId);
+      if (!a) return refuse("not_found", "No such action.");
+      const last = a.attempts[a.attempts.length - 1];
+      if (a.state !== "queued" || !last || last.result !== "queued" || last.key !== cmd.key || !a.disclosure || !a.recipient) {
+        return refuse("invalid_state", "Only the queued attempt can have a dispatch result recorded.");
+      }
+      const type = actionTypeOf(config, a.typeId);
+      const prior = a.attempts.slice(0, -1);
+      if (cmd.result.status === "cancelled") {
         return {
           ok: true,
-          state: patch(a.id, (r) => ({ ...r, state: "unresolved", gap: { kind: "dispatch_uncertain", at }, disclosure, recipient: el.key, attempts: [...r.attempts, { key, at, result: "uncertain", reason: result.reason, reference: null }] })),
-          drafts: [
-            { kind: "execution.uncertain", actionId: a.id, audience: ["holder"], text: `Execution attempt ${a.attempts.length + 1} for ${type.short} (${a.id}) has an unknown outcome (${result.reason}). It may have reached ${recipientLabel}; it is not recorded as sent and will not be retried until a person reconciles it.` },
-            { kind: "responsibility.unresolved", actionId: a.id, audience: ["holder"], text: `${type.short} (${a.id}) needs reconciliation: confirm with ${recipientLabel} whether it arrived before anything else happens.` },
-          ],
+          state: patch(a.id, (r) => ({ ...r, state: "approved", disclosure: null, attempts: [...prior, { key: last.key, at, result: "failed", reason: cmd.result.status === "cancelled" ? `cancelled: ${cmd.result.reason}` : null, reference: null }] })),
+          drafts: [{ kind: "execution.cancelled", actionId: a.id, audience: ["holder"], text: `${type.short} (${a.id}) was not sent: ${cmd.result.reason}. Nothing left the system; the action is approved but not queued, and a person decides what happens next.` }],
         };
       }
-      if (result.status === "failed") {
-        const attempts = [...a.attempts, { key, at, result: "failed" as const, reason: result.reason, reference: null }];
-        const exhausted = !result.retryable || attempts.length >= config.execution.maxAttempts;
+      const policy = policyOf(config, type.policy);
+      const outcome = executionOutcome(config, patch, a, type, last.key, prior, cmd.result, a.disclosure, a.recipient, a.disclosure.recipientLabel, policy, actor, facts, at);
+      // A retryable failure within the configured bound is queued again under the next attempt key.
+      if (cmd.result.status === "failed" && outcome.ok && outcome.state.actions.find((x) => x.id === a.id)!.state !== "unresolved") {
+        const nextKey = `${a.id}#${prior.length + 2}`;
         return {
-          ok: true,
-          state: patch(a.id, (r) => ({ ...r, attempts, ...(exhausted ? { state: "unresolved" as const, gap: { kind: "execution_failed" as const, at } } : {}) })),
-          drafts: [
-            { kind: "execution.failed", actionId: a.id, audience: ["holder"], text: `Execution attempt ${attempts.length} for ${type.short} (${a.id}) failed (${result.reason}). Nothing is recorded as sent.` },
-            ...(exhausted ? [{ kind: "responsibility.unresolved" as const, actionId: a.id, audience: ["holder"], text: `${type.short} (${a.id}) could not be executed. It is unresolved and a person decides what happens next.` }] : []),
-          ],
+          ...outcome,
+          state: { ...outcome.state, actions: outcome.state.actions.map((x) => (x.id === a.id ? { ...x, state: "queued" as const, attempts: [...x.attempts, { key: nextKey, at, result: "queued" as const, reason: null, reference: null }] } : x)) },
         };
       }
-      const labels = a.fields.map((f) => f.label).join(", ");
-      return {
-        ok: true,
-        state: patch(a.id, (r) => ({ ...r, state: "sent", recipient: el.key, sentAt: at, disclosure, attempts: [...r.attempts, { key, at, result: "delivered", reason: null, reference: result.reference }] })),
-        drafts: [
-          { kind: "execution.attempted", actionId: a.id, audience: ["holder"], text: `Execution attempt ${a.attempts.length + 1} for ${type.short} (${a.id}) was recorded as delivered.${facts.executor ? "" : " Simulation: nothing left the system."}`, strength: actor.kind === "system" ? "standing-policy" : undefined },
-          {
-            kind: "disclosure.made",
-            actionId: a.id,
-            audience: actionAudience(config, type),
-            text: `${type.short} (${a.id}) was sent to ${recipientLabel}. Purpose: ${type.purpose} Fields disclosed: ${labels}. Authority basis: ${type.authority.label}. Policy: ${policy.label} (${policy.version}). Sending is not receipt.`,
-            recipientText: `${type.short} was sent to you. Purpose: ${type.purpose} Fields disclosed to you: ${labels}. Authority basis: ${type.authority.label}. Anything not listed is not shared with you.`,
-            strength: actor.kind === "system" ? "standing-policy" : undefined,
-          },
-        ],
-      };
+      return outcome;
     }
 
     case "receive":
@@ -677,6 +773,10 @@ function handle(config: DeploymentConfiguration, s: CoordinationState, cmd: Comm
         return { ok: true, state: patch(a.id, (r) => ({ ...r, state: "declined", declineReason: cmd.reasonId })), drafts: [d("decline.recorded", `${recipientLabel} declined ${type.short} (${a.id}). Nothing was passed to anyone else.`, `You declined ${type.short}.`)] };
       }
       if (a.state !== "accepted") return refuse("invalid_state", "Only an accepted action can be reported complete.");
+      {
+        const waiting = linkBlockers(config, s, type.id, "completion");
+        if (waiting.length > 0) return refuse("dependency_unmet", `Waiting for: ${waiting.join(", ")}.`);
+      }
       if (type.outcomes.length > 0 && !type.outcomes.some((o) => o.id === cmd.outcomeId)) return refuse("reason_required", "Completion needs one of the configured outcomes.");
       return {
         ok: true,
@@ -690,6 +790,10 @@ function handle(config: DeploymentConfiguration, s: CoordinationState, cmd: Comm
       if (!a) return refuse("not_found", "No such action.");
       if (a.state !== "completed") return refuse("invalid_state", "Only a completed action can be confirmed.");
       const type = actionTypeOf(config, a.typeId);
+      {
+        const waiting = linkBlockers(config, s, type.id, "confirmation");
+        if (waiting.length > 0) return refuse("dependency_unmet", `Waiting for: ${waiting.join(", ")}.`);
+      }
       let attested = false;
       if (type.confirmer === "none") return refuse("not_permitted", "Nobody confirms this action on anyone's behalf.");
       if (type.confirmer === "holder") {
@@ -765,6 +869,10 @@ function handle(config: DeploymentConfiguration, s: CoordinationState, cmd: Comm
         drafts: [{ kind: "communication.released", actionId: a.id, audience: ["holder", `party:${to}`], text: `The holder released a prepared message about ${type.short} (${a.id}) to ${partyOf(config, to).label}, built from approved facts only. Nothing was delivered outside JALDO.`, recipientText: body }],
       };
     }
+
+    // Contract 1.2 commands are handled by `extensionCommand` before this switch.
+    default:
+      return refuse("invalid_state", "This command is not available here.");
   }
 }
 

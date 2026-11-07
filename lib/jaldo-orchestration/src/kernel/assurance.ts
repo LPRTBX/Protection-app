@@ -49,7 +49,9 @@ export function followThrough(config: DeploymentConfiguration, s: CoordinationSt
     // A recovery counts once it has been put to its approver; a bare proposal is still the holder's draft.
     const rec = own.find((b) => b.recovers === a.id && isLive(b) && b.submitted) ?? null;
     if (rec) return { ...base, state: rec.state === "confirmed" ? "confirmed" : "recovery", recovery: { actionId: rec.id, state: rec.state }, needUnresolved: rec.state !== "confirmed" };
-    const broken = interruption(a, facts);
+    // A need the record still holds as unresolved stays open after the service is available again: only a re-check or a new action clears it (T2).
+    const recordedGap = a.sentAt !== null && !a.heldBack && a.state === "unresolved" && a.gap?.kind === "recipient_unavailable" ? ("unavailable-before-acceptance" as const) : null;
+    const broken = interruption(a, facts) ?? recordedGap;
     if (broken) {
       return { ...base, state: broken === "capacity-lost-after-acceptance" ? "accepted-lost" : "interrupted", needUnresolved: true, noEligiblePathway: !recipientEligible(config, recoveryType, facts).ok };
     }
@@ -142,7 +144,9 @@ export function deriveAssuranceState(config: DeploymentConfiguration, s: Coordin
     const t = actionTypeOf(config, a.typeId);
     const present = [...new Set(evidence.filter((e) => e.actionId === a.id).map((e) => e.kind))];
     const missing = t.evidenceRequired.filter((k) => !present.includes(k));
-    const broken = interruption(a, facts);
+    // A need the record still holds as unresolved stays open after the service is available again: only a re-check or a new action clears it (T2).
+    const recordedGap = a.sentAt !== null && !a.heldBack && a.state === "unresolved" && a.gap?.kind === "recipient_unavailable" ? ("unavailable-before-acceptance" as const) : null;
+    const broken = interruption(a, facts) ?? recordedGap;
     let unresolved: string | null = null;
     if (a.state === "unresolved") {
       unresolved =
@@ -239,7 +243,7 @@ export interface SubjectView {
 
 export function subjectView(config: DeploymentConfiguration, s: CoordinationState, evidence: readonly EvidenceRecord[]): SubjectView {
   const key = subjectOf(config).key;
-  const shown = s.actions.filter((a) => subjectConcerned(config, actionTypeOf(config, a.typeId)) && (a.submitted || a.sentAt !== null));
+  const shown = s.actions.filter((a) => subjectConcerned(config, actionTypeOf(config, a.typeId)) && (a.sentAt !== null || (a.submitted && actionTypeOf(config, a.typeId).subjectSeesFrom !== "release")));
   const shownIds = new Set(shown.map((a) => a.id));
   return {
     request: s.request,

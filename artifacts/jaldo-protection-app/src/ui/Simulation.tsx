@@ -75,7 +75,7 @@ export function Simulation() {
           <div className="actions">
             <Btn tone="primary" disabled={!!w.state} onClick={() => w.admitSignal()}>Admit the simulated review event</Btn>
           </div>
-          <p className="muted">{w.state ? "The event has been admitted. Open the Operator workspace." : "Nothing exists yet. Admitting the event is the only way a review opens. It prepares, approves and sends nothing."}</p>
+          <p className="muted">{w.state ? "The event has been admitted. Open the Reviewer workspace." : "Nothing exists yet. Admitting the event is the only way a review opens. It prepares, approves and sends nothing."}</p>
         </Panel>
       ) : null}
 

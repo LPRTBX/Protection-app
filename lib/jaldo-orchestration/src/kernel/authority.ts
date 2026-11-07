@@ -152,7 +152,7 @@ export function evaluateExecutionAuthority(
   if (action.approval.configVersion !== state.config.version) {
     return { outcome: "human_review_required", reasons: ["The approval was given under an earlier configuration."], requiredApprovals: ["A fresh approval"], basis: null };
   }
-  const unmet = unmetPrerequisites(config, state, action.typeId);
+  const unmet = unmetPrerequisites(config, state, action.typeId, action, "release");
   if (unmet.length > 0) return deny(config.version, `Waiting for: ${unmet.join(", ")}.`);
   return auth;
 }

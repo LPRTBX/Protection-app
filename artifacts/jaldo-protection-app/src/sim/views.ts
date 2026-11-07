@@ -55,10 +55,10 @@ export interface CustomerView {
 }
 
 const PART_TEXT: Record<PartStatus, string> = {
-  "not-started": "Not confirmed yet. We will update you when it is.",
-  applying: "Authorised by a team member and sent. Not confirmed yet.",
+  "not-started": "We will update you when it is confirmed.",
+  applying: "Authorised by a team member and sent.",
   confirmed: "A simulated check in this demo matched. Nothing real was changed.",
-  unconfirmed: "Not confirmed yet.",
+  unconfirmed: "Still open. We will update you when it is confirmed.",
 };
 
 /**
@@ -434,7 +434,7 @@ function reviewCard(w: ProtectionWorld): ReviewCard {
         : { what: "Request clarification from the source", status: "available", why: ctx === "current" ? "Available, though the context is current." : null },
       esc
         ? { what: "Record a decision not to proceed", status: ["awaiting_approval", "proposed"].includes(esc.state) ? "available" : "unavailable", why: ["awaiting_approval", "proposed"].includes(esc.state) ? "Use 'Record decision: do not proceed' on the check-in. It is recorded, not erased." : "The check-in has already been approved or sent. Use withdraw or revoke before sending." }
-        : { what: "Record a decision not to proceed", status: "unavailable", why: "Unavailable until a check-in is prepared: a review-level no-action decision needs a Core operation (docs/protection-app/P2-design.md §10)." },
+        : { what: "Record a decision not to proceed", status: "unavailable", why: "Unavailable until a check-in is prepared: a review-level no-action decision needs a Core operation that does not exist yet." },
     ],
     whoDecides: "A named protection reviewer. Nothing is sent without their approval, and nothing about the customer's account changes.",
     willShare: "If approved: one fixed, supportive, non-promotional in-app invitation. The in-app channel receives the customer reference, a fixed template id and the wording. It never receives the source, the reason code, the freshness or the contact record.",
@@ -612,7 +612,7 @@ export function operatorView(w: ProtectionWorld): OperatorView {
     actions,
     recommendations,
     messages,
-    next: view?.plan.awaitingHuman ?? [],
+    next: view?.plan.awaitingHuman ?? w.awaitingHuman(),
     offers,
     evidence: (view?.evidence ?? []).map((e) => ({ sequence: e.sequence, at: fmt(e.at), kind: e.kind, actor: evidenceActor(e.actor?.id, e.actor?.kind ?? ""), strength: e.strength, text: e.text })),
     history: w.history.map((h) => ({ at: fmt(h.at), by: h.by, ok: h.ok, did: h.did, result: h.result })),

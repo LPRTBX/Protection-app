@@ -244,6 +244,9 @@ export function LearningReview() {
 
   return (
     <div className="learning-review">
+      <p className="boundary-note" data-testid="learning-optional">
+        <strong>Optional exploration, separate from the guided demonstration.</strong> It is not a continuation of the customer journey and is not part of the other scenarios.
+      </p>
       <Panel
         title="Next time: governed learning review"
         status="simulation"
@@ -483,7 +486,7 @@ export function LearningReview() {
             </table>
           </div>
           <p className="muted">All counts and time intervals above are drawn from <code>learning.ts</code> helper outputs and labelled as simulation values.</p>
-          <p className="muted">This sits alongside the existing customer-requested break (P1), operator-originated early-support (P2), and failure-pattern presets. Open <a className="lr-simulation-link" href="#/simulation">Simulation controls</a> to explore those patterns; this walkthrough does not alter their records. The imported preview has no separate high-risk classification scenario, so this example does not invent one.</p>
+          <p className="muted">This sits alongside the customer-requested break, the operator-originated early-support review and the failure-pattern presets. Open <a className="lr-simulation-link" href="#/simulation">Simulation controls</a> to explore those patterns; this walkthrough does not alter their records. The Protection app has no separate high-risk classification scenario, so this example does not invent one.</p>
         </div>
 
         <div className="lr-section">

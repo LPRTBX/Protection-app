@@ -2,6 +2,7 @@ import { actionTypeOf, expectationFor, partyOf, policyOf, subjectOf, type Action
 import type { MomentRecord } from "../contracts/events";
 import type { CoordinationState, Facts, FrozenField, GovernedAction } from "../contracts/orchestration";
 import { interruption, isLive, isOverdue, ownerOf, recipientEligible, recipientUnavailable } from "./predicates";
+import { deadlineExpired } from "./extensions";
 
 /**
  * Recognise → Interpret → Recommend.
@@ -174,6 +175,19 @@ export function recognise(config: DeploymentConfiguration, state: CoordinationSt
         actionId: a.id,
         text: `${type.short} (${a.id}) is waiting for ${vars.recipient}. No time expectation is configured for this step, so it is not overdue and nothing is recommended.`,
       });
+    }
+  }
+
+  // Contract 1.2: an open deadline whose absolute due instant has been reached. One moment per instance; a rescheduled
+  // instance that expires again is a repeat of the same moment, never a second alert for the same expiry.
+  if (rules.has("deadline-passed")) {
+    for (const d of state.deadlines ?? []) {
+      if (!deadlineExpired(d, facts.now)) continue;
+      const def = config.deadlines?.find((x) => x.id === d.defId);
+      const a = d.subject.kind === "action" ? own.find((x) => x.id === (d.subject as { actionId: string }).actionId) : own.find((x) => x.id === (state.followUps ?? []).find((f) => f.id === (d.subject as { followUpId: string }).followUpId)?.actionId);
+      const type = a ? actionTypeOf(config, a.typeId) : null;
+      const vars = { ref: a?.id ?? d.id, short: type?.short ?? (def?.label ?? "this step"), recipient: type ? partyOf(config, type.recipient).label : "the responsible party", due: d.dueAt };
+      all.push(recommendAction(config, state, facts, "deadline-passed", `deadline-passed:${d.id}`, a?.id ?? null, vars, null, false));
     }
   }
 

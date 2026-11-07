@@ -70,7 +70,7 @@ export interface AdapterContext {
 
 export type Translation =
   | { kind: "command"; command: Command; actor: Actor }
-  | { kind: "fact"; fact: { unavailable: string } | { available: string } | { holderUnavailable: string } | { holderAvailable: string } | { advanceDays: 1 } }
+  | { kind: "fact"; fact: { unavailable: string } | { available: string } | { holderUnavailable: string } | { holderAvailable: string } | { holderUnavailable: string; unavailable: string } | { holderAvailable: string; available: string } | { advanceDays: 1 } }
   | { kind: "open-request" }
   | { kind: "unsupported"; reason: string };
 
@@ -140,7 +140,9 @@ export function translate(cmd: Stage5BCommand, ctx: AdapterContext): Translation
         : { kind: "command", command: { type: "decline", actionId: cmd.id, reasonId: cmd.reason ?? "" }, actor };
     }
     case "coSim":
-      if (cmd.who === "jordan") return { kind: "fact", fact: cmd.kind === "unavailable" ? { holderUnavailable: "jordan" } : { holderAvailable: "jordan" } };
+      // The second contact is both an eligible holder (routing target) and the review recipient party (SPORT_PARTIES.jordan). In the 5B reducer one
+      // "unavailable" mark removes both, so both facts must be returned together; returning only the holder side leaves a review proposed to an unavailable recipient.
+      if (cmd.who === "jordan") return { kind: "fact", fact: cmd.kind === "unavailable" ? { holderUnavailable: "jordan", unavailable: SPORT_PARTIES.jordan } : { holderAvailable: "jordan", available: SPORT_PARTIES.jordan } };
       return { kind: "fact", fact: cmd.kind === "unavailable" ? { unavailable: SPORT_PARTIES[cmd.who] } : { available: SPORT_PARTIES[cmd.who] } };
     case "coAdvance":
       return { kind: "fact", fact: { advanceDays: 1 } };

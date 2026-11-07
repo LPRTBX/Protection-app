@@ -18,6 +18,8 @@ export const ACTION_STATES = [
   "proposed",
   "awaiting_approval",
   "approved",
+  /** Contract 1.1: approved, envelope frozen, dispatch intent committed — NOT sent. */
+  "queued",
   "sent",
   "received",
   "accepted",
@@ -82,7 +84,8 @@ export interface GovernedAction {
   approval: Approval | null;
   disclosure: Disclosure | null;
   /** Execution attempts, each with its own idempotency key. */
-  attempts: { key: string; at: string; result: "delivered" | "failed" | "uncertain"; reason: string | null; reference: string | null }[];
+  /** `queued` (contract 1.1) marks an attempt committed for dispatch whose outcome is not yet recorded. */
+  attempts: { key: string; at: string; result: "queued" | "delivered" | "failed" | "uncertain"; reason: string | null; reference: string | null }[];
   sentAt: string | null;
   /** Historical acceptance. Never rewritten by a later capacity change. */
   acceptedAt: string | null;
@@ -92,10 +95,63 @@ export interface GovernedAction {
   outcome: string | null;
   completedAt: string | null;
   confirmedBy: { by: ActorRecord; attested: boolean } | null;
-  withdrawal: { at: string; reason: "holder" | "transfer" | "approval_revoked" } | null;
+  withdrawal: { at: string; reason: "holder" | "transfer" | "approval_revoked" | "plan_revised" } | null;
   heldBack: boolean;
   origin: string | null;
   recovers: string | null;
+  /** Contract 1.2, only under `planVersioning`: the plan version this action belongs to. */
+  planVersion?: number;
+  /** Contract 1.2, only under `revalidatePrerequisites`: set when the recipient lost capacity after accepting. Never cleared: a renewed check is a new action. */
+  capacityLostAt?: string;
+  /** Contract 1.2: the subject's own reports on completed work, oldest first. Never alters any delivery field. */
+  responses?: ResponseRecord[];
+}
+
+export interface ResponseRecord {
+  responseId: string;
+  effect: "satisfied" | "unsatisfied" | "deferred";
+  at: string;
+  by: ActorRecord;
+  /** True when the subject's report replaced an earlier one (both are kept). */
+  supersedes: boolean;
+}
+
+/** A deadline instance. `dueAt` is an absolute UTC instant; expiry is `now >= dueAt`. */
+export interface DeadlineRecord {
+  id: string;
+  defId: string;
+  subject: { kind: "action"; actionId: string } | { kind: "follow-up"; followUpId: string };
+  setAt: string;
+  dueAt: string;
+  status: "open" | "met" | "cancelled";
+  closedAt: string | null;
+  /** On `met`: whether it was met at or after `dueAt`. */
+  late: boolean | null;
+  history: { at: string; kind: "set" | "rescheduled" | "met" | "cancelled"; from: string | null; to: string | null; reasonId: string | null }[];
+}
+
+/** The review obligation a subject's "unsatisfied" report opens. Owned by whoever holds the request. */
+export interface FollowUpRecord {
+  id: string;
+  actionId: string;
+  responseId: string;
+  openedAt: string;
+  openedOwner: string | null;
+  status: "open" | "closed";
+  closedAt: string | null;
+  outcomeId: string | null;
+}
+
+/** Work that exists independently of this coordination, tracked by an opaque reference. */
+export interface LinkRecord {
+  id: string;
+  kindId: string;
+  reference: string;
+  status: "open" | "resolved" | "unknown";
+  openedAt: string;
+  updatedAt: string;
+  updatedBy: ActorRecord;
+  withdrawn: boolean;
 }
 
 export interface CoordinationState {
@@ -116,7 +172,18 @@ export interface CoordinationState {
   processedCommands: string[];
   /** Number of evidence records written so far. */
   sequence: number;
+  /** Contract 1.2, only under `planVersioning`. */
+  planVersion?: number;
+  /** Contract 1.2, only for configurations that define `deadlines`. */
+  deadlines?: DeadlineRecord[];
+  /** Contract 1.2: obligations opened by an "unsatisfied" subject response. */
+  followUps?: FollowUpRecord[];
+  /** Contract 1.2, only for configurations that define `linkKinds`. */
+  links?: LinkRecord[];
 }
+
+/** Contract 1.1: the outcome of a queued attempt, as recorded by the host's dispatcher. */
+export type DispatchResult = ExecutionResult | { status: "cancelled"; reason: string };
 
 /** Outcome of one execution attempt, reported by an injected executor. */
 export type ExecutionResult =
@@ -147,6 +214,11 @@ export interface Facts {
   /** Members currently eligible to hold this request (active, authorised, not conflicted). */
   eligibleHolders?: readonly string[];
   executor?: Executor;
+  /**
+   * Contract 1.1: `"queue"` — the host commits a durable dispatch intent instead of executing inline.
+   * `execute` then moves the action to `queued`; the outcome arrives later via `recordDispatchResult`.
+   */
+  dispatch?: "inline" | "queue";
 }
 
 export type FourChecks = { recipient: boolean; purpose: boolean; fields: boolean; authority: boolean };
@@ -168,7 +240,23 @@ export type Command =
   | { type: "complete"; actionId: string; outcomeId?: string }
   | { type: "confirm"; actionId: string }
   | { type: "recheck"; actionId: string }
+  /**
+   * Contract 1.1, system only: the recorded outcome of a queued attempt. `cancelled` means it was never
+   * sent (authority, channel or state changed before dispatch): the action returns to `approved`.
+   */
+  | { type: "recordDispatchResult"; actionId: string; key: string; result: DispatchResult }
   | { type: "releaseCommunication"; templateId: string; actionId: string }
+  /** Contract 1.2. A material change: unsent work of the old version is withdrawn and approvals do not carry over. */
+  | { type: "revisePlan"; reasonId: string }
+  /** Contract 1.2. The subject's own report on completed work, by configured response id. */
+  | { type: "recordResponse"; actionId: string; responseId: string }
+  | { type: "closeFollowUp"; followUpId: string; outcomeId: string }
+  /** Contract 1.2. `dueAt` is an absolute UTC instant (ISO 8601 with `Z`) strictly after now. */
+  | { type: "rescheduleDeadline"; deadlineId: string; dueAt: string; reasonId: string }
+  | { type: "cancelDeadline"; deadlineId: string; reasonId: string }
+  | { type: "linkWork"; kindId: string; reference: string; status: "open" | "unknown" }
+  | { type: "recordLinkStatus"; linkId: string; status: "open" | "resolved" }
+  | { type: "withdrawLink"; linkId: string }
   /** A person records, with an evidence reference, whether an uncertain dispatch was delivered. */
   | {
       type: "reconcileDispatch";
@@ -196,6 +284,7 @@ export const COMMAND_TYPES: readonly Command["type"][] = [
   "acceptRequest", "routeRequest", "propose", "dismissRecommendation", "submit", "withdraw", "approve",
   "refuse", "revokeApproval", "execute", "receive", "accept", "decline", "complete", "confirm", "recheck",
   "releaseCommunication", "reconcileDispatch",
+  "revisePlan", "recordResponse", "closeFollowUp", "rescheduleDeadline", "cancelDeadline", "linkWork", "recordLinkStatus", "withdrawLink",
 ];
 
 /** A command with its own identity, so a duplicate delivery has no second effect. */

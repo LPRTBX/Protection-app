@@ -29,6 +29,18 @@ describe("Rendered structure", () => {
     }
   });
 
+  it("every screen carries a prominent return link to the Protection overview, and Start here shows how the parts connect", () => {
+    for (const r of ROUTES) {
+      const h = html(new ProtectionWorld(), r);
+      assert.match(h, /<a class="overview-link" href="https:\/\/wearejaldo\.com\/protection" data-testid="overview-link">/, r);
+      assert.ok(text(h).includes("Explore JALDO Protection"), r);
+    }
+    const g = text(html(new ProtectionWorld(), "guide"));
+    for (const t of ["How the three parts connect", "System", "Reviewer", "Customer", "Operations"]) assert.ok(g.includes(t), t);
+    const c = html(new ProtectionWorld(), "customer/today");
+    assert.match(c, /href="#\/operator"/);
+  });
+
   it("the customer app has four labelled tabs and marks the current one", () => {
     const h = html(new ProtectionWorld(), "customer/support");
     const nav = h.slice(h.indexOf('aria-label="Customer app"'));
@@ -56,7 +68,8 @@ describe("Rendered structure", () => {
   it("operations screens never show the customer's words", () => {
     const t = text(html(fullJourney(), "operations"));
     assert.equal(t.includes(NOTE), false);
-    assert.ok(t.includes("Account-control execution"));
+    // Execution is grouped by availability; the connected system is named on each row.
+    assert.ok(t.includes("Account break") && t.includes("System: Account controls system"));
     assert.equal(/Customer notice|CAN-1|CMN-1/.test(t), false, "Operations never sees the customer notices");
   });
 
@@ -74,11 +87,12 @@ describe("Rendered structure", () => {
   });
 
   it("labels operator learning as a fictional demonstration, not a production access boundary", () => {
-    const t = text(html(new ProtectionWorld(), "guide"));
+    // The learning walkthrough now lives behind its own optional route; Start here only links to it.
+    const t = text(html(new ProtectionWorld(), "learning"));
     assert.match(t, /Operator learning demonstration/);
     assert.match(t, /not a production access-control boundary/);
     assert.doesNotMatch(t, /Restricted internal learning/);
-    assert.match(t, /same app, kernel and three role views/);
+    assert.match(text(html(new ProtectionWorld(), "guide")), /same app, kernel and three role views/);
     assert.match(t, /Customer-visible:.*Internal rule details, alert rationale and reviewer discussion are not included/);
   });
 });

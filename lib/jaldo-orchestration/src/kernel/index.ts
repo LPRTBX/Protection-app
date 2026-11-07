@@ -8,3 +8,4 @@ export * from "./assurance";
 export * from "./operations";
 export * from "./orchestrator";
 export * from "./value";
+export * from "./extensions";

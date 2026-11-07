@@ -42,18 +42,46 @@ export function interruption(
   return null;
 }
 
-/** Unmet prerequisites for executing `action`, as `<actionType> <state>` strings. */
-export function unmetPrerequisites(config: DeploymentConfiguration, state: CoordinationState, typeId: string): string[] {
+/**
+ * Unmet prerequisites for `typeId`, as `<actionType> <state>` strings.
+ *
+ * Default (1.1) behaviour: some live action of the prerequisite's type has reached the state. Contract 1.2 adds, per
+ * configuration, strict validity for an action type that sets `revalidatePrerequisites`: the prerequisite must be in the
+ * same plan version (under `planVersioning`) and its recipient must not have lost capacity since accepting. A renewed
+ * check is a new action of the same type (see `propose`); the earlier one stays on record. A prerequisite entry may also
+ * require the same recipient and covered fields.
+ * `stage` selects the release prerequisites (default) or the approval prerequisites.
+ */
+export function unmetPrerequisites(
+  config: DeploymentConfiguration,
+  state: CoordinationState,
+  typeId: string,
+  candidate?: GovernedAction,
+  stage: "approval" | "release" = "release",
+): string[] {
   const order = ["accepted", "completed", "confirmed"];
-  return actionTypeOf(config, typeId)
-    .prerequisites.filter((pre) => {
+  const type = actionTypeOf(config, typeId);
+  const list = stage === "approval" ? (type.approvalPrerequisites ?? []) : type.prerequisites;
+  const strict = type.revalidatePrerequisites === true;
+  const version = candidate?.planVersion ?? state.planVersion ?? 1;
+  return list
+    .map((pre) => {
       const live = state.actions.filter((a) => a.typeId === pre.actionType && !a.heldBack && isLive(a));
-      return !live.some((a) => {
+      let nearMiss: string | null = null;
+      const ok = live.some((a) => {
         const reached = a.state === "accepted" ? 0 : a.state === "completed" ? 1 : a.state === "confirmed" ? 2 : -1;
-        return reached >= order.indexOf(pre.state);
+        if (reached < order.indexOf(pre.state)) return false;
+        if (config.planVersioning && (a.planVersion ?? 1) !== version) { nearMiss = "it was recorded under an earlier plan version and must be renewed for this one"; return false; }
+        if (strict && a.capacityLostAt) { nearMiss = "its recipient lost capacity after accepting, so a renewed check is needed (the earlier record is kept)"; return false; }
+        if (candidate && pre.sameRecipient && actionTypeOf(config, a.typeId).recipient !== actionTypeOf(config, candidate.typeId).recipient) { nearMiss = "it was given for a different recipient"; return false; }
+        if (candidate && pre.coversFields && !candidate.fields.every((f) => a.fields.some((g) => g.id === f.id && g.value === f.value))) { nearMiss = "it does not cover everything this action would share"; return false; }
+        return true;
       });
+      if (ok) return null;
+      const label = `${actionTypeOf(config, pre.actionType).short} ${pre.state}`;
+      return nearMiss ? `${label} (${nearMiss})` : label;
     })
-    .map((pre) => `${actionTypeOf(config, pre.actionType).short} ${pre.state}`);
+    .filter((x): x is string => x !== null);
 }
 
 export function ownerOf(state: CoordinationState): string | null {

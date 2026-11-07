@@ -4,6 +4,7 @@ import {
   holderView,
   ingestEvent,
   openCoordination,
+  prepareCoordinationPlan,
   recogniseMoment,
   runAnticipatoryCycle,
   subjectView,
@@ -654,6 +655,14 @@ export class ProtectionWorld {
 
   holder(): HolderView | null {
     return this.state ? holderView(this.config, this.state, this.evidence, this.facts(), REVIEWER.memberId) : null;
+  }
+  /**
+   * What a person must do next, from the kernel's own coordination plan. Before the reviewer holds the request, `holder()` is
+   * null (the holder projection belongs to the owner), but the plan still names the pending step: accept responsibility.
+   * Reading it here keeps "What needs a person next" consistent with the review queue. It adds no rule of its own.
+   */
+  awaitingHuman(): { what: string; who: string }[] {
+    return this.state ? prepareCoordinationPlan(this.config, this.state, this.facts()).awaitingHuman : [];
   }
   /** Active recommendations, derived by the kernel for the request owner only. */
   recommendations(): Recommendation[] {

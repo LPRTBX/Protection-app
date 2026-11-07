@@ -9,14 +9,17 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 const { chromium } = require("playwright");
 const axeSource = readFileSync(require.resolve("axe-core/axe.min.js"), "utf8");
-const port = 23583;
+const port = Number(process.env.PROTECTION_LEARNING_PORT ?? 23583);
 const base = `http://localhost:${port}/protection-app/`;
+const builtHtml = readFileSync(path.join(here, "..", "dist", "public", "index.html"), "utf8");
+const builtAsset = builtHtml.match(/<script[^>]+src="([^"]+)"/)?.[1];
+if (!builtAsset) throw new Error("Build the Protection app before running browser checks.");
 const failures = [];
 const ok = (condition, description) => {
   if (!condition) failures.push(description);
   console.log(`${condition ? "PASS" : "FAIL"} ${description}`);
 };
-const server = spawn("pnpm", ["exec", "vite", "preview", "--config", "vite.config.ts", "--port", String(port)], {
+const server = spawn("pnpm", ["exec", "vite", "preview", "--config", "vite.config.ts", "--port", String(port), "--strictPort"], {
   cwd: path.resolve(here, ".."),
   stdio: "ignore",
   env: { ...process.env, PORT: String(port) },
@@ -25,16 +28,23 @@ process.on("exit", () => { try { server.kill("SIGTERM"); } catch { /* already st
 
 let browser;
 try {
+  let ready = false;
   for (let i = 0; i < 60; i++) {
-    try { if ((await fetch(base)).ok) break; } catch { /* server is starting */ }
+    if (server.exitCode !== null) throw new Error(`Test preview exited; port ${port} may be occupied. Set PROTECTION_LEARNING_PORT to an unused port.`);
+    try {
+      const response = await fetch(base);
+      if (response.ok && (await response.text()).includes(builtAsset)) { ready = true; break; }
+    } catch { /* server is starting */ }
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
+  if (!ready) throw new Error(`Test preview did not serve this build (${builtAsset}); refusing to test another running app.`);
+  console.log(`Verified test build: ${builtAsset}`);
   browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
-  await page.goto(`${base}#/guide`);
+  await page.goto(`${base}#/learning`);
   await page.locator("#learning-review").scrollIntoViewIfNeeded();
   await page.waitForSelector("#learning-review");
   const demo = page.locator("#learning-review");
@@ -95,7 +105,7 @@ try {
   ok(customerPreview.includes("No customer summary is shown"), "customer preview is empty before a fictional run");
   ok(!/policy V|reviewer approval|alert rationale|receiving-system evidence/i.test(customerPreview), "customer preview omits restricted policy and review details");
   await axe("390px customer summary preview");
-  const internalToggle = demo.getByRole("radio", { name: /Restricted internal learning/ });
+  const internalToggle = demo.getByRole("radio", { name: /Operator learning demonstration/ });
   await internalToggle.focus();
   await page.keyboard.press("Space");
 
@@ -172,7 +182,7 @@ try {
   ok(!/policy V|reviewer approval|alert rationale|receiving-system evidence/i.test(finalCustomerPreview), "customer projection continues to exclude restricted learning and acknowledgement details");
 
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.getByRole("radio", { name: /Restricted internal learning/ }).check();
+  await page.getByRole("radio", { name: /Operator learning demonstration/ }).check();
   await noOverflow("1280px desktop");
   await axe("1280px desktop");
   await page.setViewportSize({ width: 390, height: 844 });

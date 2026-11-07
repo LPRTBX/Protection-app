@@ -8,6 +8,23 @@ import { CONTACT_CHOICES } from "../sim/scope";
 const state = (w: ProtectionWorld, id: string) => w.action(id)!.state;
 
 describe("The complete journey", () => {
+  it("shows a committed dispatch as pending, not sent or awaiting acceptance", () => {
+    const w = opened();
+    w.approve("ACB-1");
+    const a = w.action("ACB-1")!;
+    const queued = {
+      ...a,
+      state: "queued" as const,
+      attempts: [{ key: "ACB-1#1", at: a.createdAt, result: "queued" as const, reason: null, reference: null }],
+    };
+
+    const stage = w.stage(queued);
+    assert.equal(stage.stage, "approved");
+    assert.equal(stage.label, "Approved — dispatch pending");
+    assert.match(stage.detail, /nothing is recorded as sent/);
+    assert.equal(stage.notYetAccepted, false);
+  });
+
   it("request, human authority, separate actions, outcomes, then approved status only", () => {
     const w = new ProtectionWorld();
     assert.equal(customerView(w).hasRequest, false);
