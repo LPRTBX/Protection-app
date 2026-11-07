@@ -90,14 +90,14 @@ export function NextSteps({ v, onJump }: { v: OperatorView; onJump: (id: string)
       {available.length > 0 ? (
         <>
           <p className="group-label" data-testid="next-available"><strong>Available for your decision now</strong></p>
-          <ul className="list">{available.map((n) => <li key={n.what}>{n.what} <span className="muted">· {n.who}</span>{n.target && n.target !== "responsibility" ? <> · <a href={`#${n.target}`} onClick={(e) => { e.preventDefault(); onJump(n.target!); }}>Go to this decision</a></> : null}</li>)}</ul>
+          <ul className="list">{available.map((n, i) => <li key={`${n.what}:${i}`}>{n.what} <span className="muted">· {n.who}</span>{n.target && n.target !== "responsibility" ? <> · <a href={`#${n.target}`} onClick={(e) => { e.preventDefault(); onJump(n.target!); }}>Go to this decision</a></> : null}</li>)}</ul>
         </>
       ) : items.length > 0 ? <p data-testid="next-none-available"><strong>Nothing is available for your decision right now.</strong></p> : null}
-      {other.length > 0 ? <ul className="list" data-testid="next-other">{other.map((n) => <li key={n.what}>{n.what} <span className="muted">· {n.who}</span></li>)}</ul> : null}
+      {other.length > 0 ? <ul className="list" data-testid="next-other">{other.map((n, i) => <li key={`${n.what}:${i}`}>{n.what} <span className="muted">· {n.who}</span></li>)}</ul> : null}
       {blocked.length > 0 ? (
         <>
           <p className="group-label" data-testid="next-waiting"><strong>Not available yet</strong></p>
-          <ul className="list">{blocked.map((n) => <li key={n.what}>{n.what} <span className="muted">· {n.who}</span><br /><span className="muted">Cannot be completed now. {n.reason}</span></li>)}</ul>
+          <ul className="list">{blocked.map((n, i) => <li key={`${n.what}:${i}`}>{n.what} <span className="muted">· {n.who}</span><br /><span className="muted">Cannot be completed now. {n.reason}</span></li>)}</ul>
         </>
       ) : null}
     </div>

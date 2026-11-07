@@ -1,9 +1,11 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { isValidElement, type ReactNode } from "react";
 import { ProtectionWorld } from "../sim/session";
 import { operatorView, operationsView, type Offer } from "../sim/views";
 import { CONTACT_CHOICES } from "../sim/scope";
 import { availableOffer, classifyAction, classifyOffers, classifyOpsRow, nextGuidance, requestDetailRows } from "../ui/decisions";
+import { NextSteps } from "../ui/Decisions";
 import { approveAndSend, confirmed, fullJourney, NOTE, opened } from "./helpers";
 
 /** The state in the review: both protections authorised and sent, customer-notice approvals held, a pending-status message prepared. */
@@ -56,6 +58,20 @@ describe("Decision groups come from existing offers, eligibility and stages", ()
 });
 
 describe("Next-step guidance leads to an available action and never implies a blocked one can be completed", () => {
+  it("repeated guidance text still has unique React sibling keys", () => {
+    const v = operatorView(sent());
+    v.next = [v.next[0], v.next[0], v.next[0]];
+    const visit = (node: ReactNode): void => {
+      if (Array.isArray(node)) {
+        const keys = node.flatMap((child) => isValidElement(child) && child.key !== null ? [child.key] : []);
+        assert.equal(new Set(keys).size, keys.length, "guidance siblings must not reuse their wording as a key");
+        node.forEach(visit);
+      } else if (isValidElement<{ children?: ReactNode }>(node)) {
+        visit(node.props.children);
+      }
+    };
+    visit(NextSteps({ v, onJump: () => {} }));
+  });
   it("authorised and sent: the available release comes first and links to it; the two approvals are blocked with their reason and no link", () => {
     const g = nextGuidance(operatorView(sent()));
     assert.equal(g[0].state, "available");

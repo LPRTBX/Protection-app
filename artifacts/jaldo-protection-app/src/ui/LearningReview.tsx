@@ -241,6 +241,15 @@ export function LearningReview() {
   const v2Comparison = dryRunComplete && firstRun
     ? createLearningRun("next", firstRun.number + 1, 2)
     : null;
+  const governanceStatus = rolledBack
+    ? "V2 approval retained; rolled back. V1 is active for future runs."
+    : activeVersion === 2
+      ? "Approved and active for this simulation."
+      : approved
+        ? "Approved, not yet active"
+        : dryRunComplete
+          ? "Dry run complete; approval pending."
+          : v2Proposed ? "Proposed; not approved." : "No proposal.";
 
   return (
     <div className="learning-review">
@@ -351,7 +360,7 @@ export function LearningReview() {
               <p className="muted">Only a fictional Protection reviewer with policy approval authority may approve. The customer, an automated process or a support operator without that authority cannot approve this policy.</p>
               <div className="lr-actions">
                 <Btn tone="primary" onClick={approveV2} disabled={!allAcknowledged || approved}>Record human reviewer approval</Btn>
-                {approved ? <span className="lr-inline"><StatusChip status="simulation" /> Approved, not yet active</span> : null}
+                {approved ? <span className="lr-inline" data-testid="learning-approval-status"><StatusChip status="simulation" /> {governanceStatus}</span> : null}
               </div>
             </fieldset>
           ) : null}
@@ -465,7 +474,7 @@ export function LearningReview() {
                   <th scope="row">Recognition</th>
                   <td>V1 waits for a fixed batch even though some source context is available earlier.</td>
                   <td>Connect available required context to the review queue; do not invent unavailable context.</td>
-                  <td>{activated ? "Approved and active for this simulation." : approved ? "Approved; activation pending." : dryRunComplete ? "Dry run complete; approval pending." : v2Proposed ? "Proposed; not approved." : "No proposal."}</td>
+                  <td data-testid="learning-version-status">{governanceStatus}</td>
                   <td>{improvedRun ? `Run ${improvedRun.number} V2 opened at ${displayTime(improvedRun.reviewAt)}; V1 opened at ${displayTime(firstRun!.reviewAt)}.` : v2Comparison ? `Dry run predicts ${minutesBetween(v2Comparison.reviewAt, firstRun!.reviewAt)} minutes earlier; no live replay yet.` : "Awaiting a V2 test and replay."}</td>
                 </tr>
                 <tr>

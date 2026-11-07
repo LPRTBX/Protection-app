@@ -22,3 +22,10 @@ The user approved keeping the reviewed preview as a baseline and doing future vi
 **Why:** They want a standalone partner-ready project while preserving the reviewed preview and other apps.
 
 **How to apply:** Start from the latest tested Protection source, retain its shared kernel and design package, keep fictional-only/no-live-service boundaries, and leave the original preview unchanged.
+
+### Standalone source reconciliation
+The standalone Protection repository has a different Git history from RTBX-Main. Reconcile only the Protection artifact and the shared packages it actually requires from a verified source revision; do not merge the unrelated histories or replace the whole workspace. Preserve the standalone artifact routing, service port, build/static-serving configuration, existing work, and governed-learning experience.
+
+**Why:** The user explicitly requires a Protection-only reconciliation while retaining the independently configured standalone preview and deployment.
+
+**How to apply:** Verify the requested source revision is present and contained by the supplied source ref, identify the workspace dependency closure, compare selected paths, and keep standalone/root configuration out of the import. Do not publish unless separately authorized.

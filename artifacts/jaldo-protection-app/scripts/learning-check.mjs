@@ -131,8 +131,11 @@ try {
   const approve = demo.getByRole("button", { name: "Record human reviewer approval" });
   await approve.focus();
   await page.keyboard.press("Enter");
-  ok(await demo.getByText(/Approved, not yet active/).isVisible(), "explicit fictional reviewer approval is recorded before activation");
+  ok((await demo.getByTestId("learning-approval-status").innerText()).includes("Approved, not yet active"), "explicit fictional reviewer approval is recorded before activation");
   await demo.getByRole("button", { name: "Activate V2 for simulation only" }).click();
+  for (const id of ["learning-approval-status", "learning-version-status"]) {
+    ok((await demo.getByTestId(id).innerText()).includes("Approved and active"), `${id} reflects V2 activation without stale pending copy`);
+  }
   await demo.getByRole("button", { name: "Attempt duplicate activation" }).click();
   ok(await demo.getByText(/Second activation rejected/).isVisible(), "duplicate V2 activation is refused");
   ok((await demo.locator(".lr-grid").first().innerText()).includes("Policy V2"), "V2 is active only after approval and a separate activation");
@@ -168,7 +171,11 @@ try {
   ok((await demo.locator(".lr-grid").first().innerText()).includes("Policy V2"), "alert feedback does not silently change the active policy");
 
   await demo.getByRole("button", { name: "Rollback future runs to V1" }).click();
-  ok(await demo.getByText(/V1 is active for future runs/).isVisible(), "rollback restores V1 for new simulation runs");
+  for (const id of ["learning-approval-status", "learning-version-status"]) {
+    const status = await demo.getByTestId(id).innerText();
+    ok(status.includes("rolled back") && status.includes("V1 is active for future runs") && !status.includes("Approved and active"), `${id} reflects rollback while retaining the prior approval`);
+  }
+  ok(await demo.getByText("V1 is active for future runs; earlier runs remain.", { exact: true }).isVisible(), "rollback restores V1 for new simulation runs");
   await demo.getByRole("button", { name: "Replay fixed sequence with V1" }).click();
   ok((await demo.locator(".lr-history-item").count()) === 3, "post-rollback V1 replay is a new third history record");
   ok(await demo.getByText(/Run 3: 3 scripted repeat prompts/).isVisible(), "rollback replay restores V1's three scripted repeat prompts for future runs");
