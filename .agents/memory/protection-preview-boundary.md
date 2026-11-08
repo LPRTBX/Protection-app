@@ -29,3 +29,10 @@ The standalone Protection repository has a different Git history from RTBX-Main.
 **Why:** The user explicitly requires a Protection-only reconciliation while retaining the independently configured standalone preview and deployment.
 
 **How to apply:** Verify the requested source revision is present and contained by the supplied source ref, identify the workspace dependency closure, compare selected paths, and keep standalone/root configuration out of the import. Do not publish unless separately authorized.
+
+### Coordination-loop product position
+Protection demonstrates JALDO's shared Core coordination loop, not a generic workflow platform: permitted signals bring context together, configured rules support interpretation and eligibility, authorised people decide, destinations provide separate execution evidence, and improvement remains explicitly reviewed.
+
+**Why:** The user explicitly identified this coordination loop as JALDO's differentiation and required system-originated initiation alongside the customer route.
+
+**How to apply:** Reuse shared Core behavior rather than inventing a competing local engine. Keep scripted interpretation and destination responses visibly fictional; report missing Core capabilities rather than disguising browser adapters as production support.
