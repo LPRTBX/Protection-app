@@ -73,8 +73,9 @@ try {
 
     // ── Front door: two separate experiences
     await page.goto(BASE); await page.waitForSelector("h1");
-    ok((await page.locator("h1").innerText()).includes("Choose how to experience Protection"), "the bare URL is the front door");
-    ok((await page.getByTestId("experience-explore").getByRole("link", { name: "Explore the system" }).count()) === 1 && (await page.getByTestId("experience-reviewer").getByRole("link", { name: "Experience the reviewer role" }).count()) === 1, "two separate entries: Explore the system and Experience the reviewer role");
+    ok((await page.locator("h1").innerText()).includes("See Protection coordinate around an event"), "the bare URL is the front door");
+    ok((await page.getByTestId("experience-observe").getByRole("link", { name: "Start the fictional system-event replay" }).count()) === 1 && (await page.getByTestId("experience-observe").getByRole("link", { name: "Or start with a customer-requested break" }).count()) === 1, "system-originated and customer-originated journeys remain separate");
+    ok((await page.getByTestId("experience-explore").getByRole("link", { name: "Explore the system" }).count()) === 1 && (await page.getByTestId("experience-reviewer").getByRole("link", { name: "Experience the reviewer role" }).count()) === 1, "Explore the system and Experience the reviewer role remain");
     ok((await page.getByTestId("presentation-note").innerText()).includes("Server-enforced access remains a production requirement"), "the front door states navigation is presentation and server-enforced access remains a production requirement");
     ok(await noOverflow(page), "front door: no horizontal overflow");
     await axeRun(page, "front door"); await shot(page, `${tag}-0-front-door`);
@@ -127,8 +128,7 @@ try {
     ok(await resp.getByRole("button", { name: "Take responsibility for this request" }).isDisabled(), "it stays disabled until each check is ticked");
     await reviewed(page, "Take responsibility for this request");
     await page.waitForSelector("#decisions-available");
-    await click(page, "Prepare the configured plan");
-    ok((await page.locator("#decisions-available").innerText()).includes("Account break") || (await page.locator("#decisions-waiting").innerText()).includes("Account break"), "the plan's actions appear as decisions");
+    ok((await page.locator("#decisions-available").innerText()).includes("Account break") || (await page.locator("#decisions-waiting").innerText()).includes("Account break"), "Core prepares the configured plan as proposals when responsibility is accepted");
     // Approve each protection individually
     for (const [id, label] of [["Account break ACB-1", "Approve: Account break"], ["Marketing suppression MKT-1", "Approve: Marketing suppression"]]) {
       const c = card(page, id);

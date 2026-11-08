@@ -107,7 +107,9 @@ export function ObserverApp() {
           <summary>About this view</summary>
           <p className="reset-in-more"><button type="button" className="btn btn-quiet" onClick={() => w.reset()} data-testid="observer-reset-more">Start the session again</button></p>
           <p>Each panel reads only its own role's information and works on its own, with its own navigation and scroll. A change made in one panel appears in the others as soon as it happens, and the item that changed is highlighted briefly.</p>
-          <p className="muted">Nothing here advances by itself. Approving or sending never moves another system: each destination answers only when its simulated controls are used.</p>
+          <p className="muted">{w.automaticSystemResponsesEnabled
+            ? "Configured fictional destinations respond after an authorised send. Approval is not delivery; destination response, read-back and reviewer confirmation stay separate."
+            : "This session uses manual simulated destination controls. Approval is not delivery; destination response, read-back and reviewer confirmation stay separate."}</p>
         </details>
       </div>
 
@@ -122,8 +124,10 @@ export function ObserverApp() {
         </div>
       ) : null}
 
-      {wrongScenario ? (
-        <p className="note attention" role="note" data-testid="wrong-scenario">This session is the early-support scenario, which has no customer. Start the session again to watch the customer-requested break across the three roles.</p>
+      {wrongScenario && w.state ? (
+        <p className="note" role="note" data-testid="system-origin">
+          <strong>System-originated fictional review.</strong> The upstream source requested a review; the customer has not reported a problem or asked for a break. Its reason code is not interpreted or verified. Contact permission is a separate simulated record.
+        </p>
       ) : null}
 
       <h1 className="sr-only">Demonstration observer view: the customer, the protection reviewer, and Operations with connected systems</h1>

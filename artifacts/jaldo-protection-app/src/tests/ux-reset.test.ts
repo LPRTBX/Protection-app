@@ -31,13 +31,16 @@ describe("Operator guidance agrees with the queue (audit finding A)", () => {
     assert.deepEqual(v.next, []);
   });
 
-  it("taking responsibility does not approve or send anything, and the pending step then moves on", () => {
+  it("taking responsibility lets Core prepare proposals, but does not approve or send anything", () => {
     const w = new ProtectionWorld();
     w.submitRequest({ duration: "7 days", contact: CONTACT_CHOICES[0].id as never, note: NOTE });
     w.acceptResponsibility();
     const v = operatorView(w);
     assert.equal(v.status, "owner_accepted");
-    assert.equal(w.actions().length, 0);
+    assert.ok(w.actions().some((action) => action.id === "ACB-1"));
+    assert.ok(w.actions().some((action) => action.id === "MKT-1"));
+    assert.ok(w.actions().every((action) => action.state === "proposed" || action.state === "awaiting_approval"));
+    assert.equal(w.connectorLog.length, 0);
     assert.ok(!v.next.some((n) => /accept responsibility/i.test(n.what)));
   });
 });

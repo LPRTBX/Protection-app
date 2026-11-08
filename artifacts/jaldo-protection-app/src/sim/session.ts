@@ -1,12 +1,9 @@
 import {
-  applyCommand,
   deriveAssuranceState,
   holderView,
-  ingestEvent,
-  openCoordination,
+  orchestrateMoment,
   prepareCoordinationPlan,
   recogniseMoment,
-  runAnticipatoryCycle,
   subjectView,
   unmetPrerequisites,
   type Actor,
@@ -20,7 +17,7 @@ import {
   type Recommendation,
   type SubjectView,
 } from "@workspace/jaldo-orchestration";
-import { PROTECTION } from "../config/protection-config";
+import { PROTECTION, PROTECTION_EARLY_SUPPORT } from "../config/protection-config";
 import { makeExecutor, defaultScripts, PRESETS, P2_PRESETS, type Behaviour, type ConnectorKey, type ConnectorScript, type P2PresetId, type PresetId, type ReadBack } from "./connectors";
 import { CONTACT_CHOICES, CONTEXT_LABEL, CUSTOMER, FICTIONAL_NOTES, INTAKE, OPERATIONS, P1_ACTION_TYPES, P2_ACTION_TYPES, REVIEWER, SCOPE, SIGNAL, SIMULATION_START, defaultVariant, type ContactChoice, type ContextState, type Duration, type ScenarioId, type Variant } from "./scope";
 import { stageOf, type StageView } from "./stage";
@@ -28,13 +25,14 @@ import { stageOf, type StageView } from "./stage";
 /**
  * THE DEMONSTRATION BOUNDARY.
  *
- * This module is an adapter, in the same form as the Sport workspace's. It calls the shared kernel's public operations and
- * stores what the kernel returns. It defines no action state, no transition, no authority rule, no recommendation and no
- * timer. Whether anything is allowed is the kernel's answer, and every refusal is shown in the kernel's own words.
+ * This module is a browser-only adapter. Events, commands, policy recognition, authority, transitions and Core automation
+ * go through the shared kernel's `orchestrateMoment` entry point. It stores only the returned state.
  *
  * What it adds, and nothing more:
  *  - scripted SIMULATED systems (connectors.ts) that stand in for connectors which do not exist;
- *  - a simulated read-back recorded in the demo, whose result a person must see before the kernel's `confirm` is offered;
+ *  - short demo-only timers that let scripted systems send their own receive/accept/complete commands after an authorised
+ *    send; each command still passes through the kernel;
+ *  - a simulated read-back recorded in the demo, which remains separate from the kernel's `confirm`;
  *  - a contact-permission check at the command boundary below (`command`), re-read at every propose, submit, approve and
  *    send of optional support outreach. It is NOT kernel-enforced and NOT production enforcement: Core needs the permission as
  *    a precondition evaluated at approve and execute, a durable store and authenticated enforcement (docs/protection-app).
@@ -89,7 +87,9 @@ export interface ActorChoice {
 }
 
 export class ProtectionWorld {
-  readonly config = PROTECTION;
+  get config() {
+    return this.scenario === "early-support" ? PROTECTION_EARLY_SUPPORT : PROTECTION;
+  }
   now = SIMULATION_START;
   version = 0;
   state: CoordinationState | null = null;
@@ -110,6 +110,9 @@ export class ProtectionWorld {
   reviewerRevoked = false;
   private listeners = new Set<() => void>();
   private n = 0;
+  private automaticSystemResponses = false;
+  private responseGeneration = 0;
+  private responseTimers = new Set<ReturnType<typeof setTimeout>>();
   private requestRef: string | null = null;
   receivedAt: Date | null = null;
   /** The customer's CURRENT contact permission. The request's own field is frozen and is never rewritten by a change. */
@@ -125,8 +128,36 @@ export class ProtectionWorld {
     return () => this.listeners.delete(l);
   };
   getVersion = () => this.version;
+  get automaticSystemResponsesEnabled() {
+    return this.automaticSystemResponses;
+  }
+
+  /** Front-door system event replay: one permitted fictional source event, then Core owns interpretation and routing. */
+  startSystemEventReplay(): Outcome {
+    this.reset();
+    const selected = this.selectScenario("early-support");
+    if (!selected.ok) return selected;
+    const preset = this.applyP2Preset("p2-current");
+    if (!preset.ok) return preset;
+    this.setBehaviour("upstream-source", "times-out");
+    this.automaticSystemResponses = true;
+    return this.admitSignal();
+  }
+
+  /** Keep the customer-originated route as a separate entry; only simulated destinations are auto-played after approval/send. */
+  startCustomerRequestDemo(): Outcome {
+    this.reset();
+    this.applyPreset("one-fails");
+    this.automaticSystemResponses = true;
+    this.notify();
+    return { ok: true, note: "Customer-requested demonstration ready." };
+  }
 
   reset() {
+    for (const timer of this.responseTimers) clearTimeout(timer);
+    this.responseTimers.clear();
+    this.responseGeneration += 1;
+    this.automaticSystemResponses = false;
     this.now = SIMULATION_START;
     this.state = null;
     this.evidence = [];
@@ -290,11 +321,21 @@ export class ProtectionWorld {
     if (!this.state) return { ok: false, code: "not_found", message: "No request is open." };
     const refused = this.boundary(command);
     if (refused) return this.fail(this.who(actor), did, refused);
-    const r = applyCommand(this.config, this.state, { id: `cmd-${++this.n}`, command }, actor, this.facts());
+    const id = `cmd-${++this.n}`;
+    const r = orchestrateMoment(
+      this.config,
+      this.state,
+      { kind: "command", envelope: { id, command }, actor },
+      this.facts(),
+      `cycle-${id}`,
+    );
     if (!r.ok) return this.fail(this.who(actor), did, r);
     this.state = r.state;
     this.evidence.push(...r.evidence);
     this.record(this.who(actor), did, true, r.evidence.map((e) => e.text).join(" ") || "Recorded.");
+    for (const automated of r.report.automated) {
+      this.record("JALDO Core (automation)", automated, true, "Configured proposal only. No human approval, send or completion is implied.");
+    }
     return { ok: true, note: "Recorded." };
   }
 
@@ -404,7 +445,13 @@ export class ProtectionWorld {
       classification: def.maxClassification,
       context: { who: CUSTOMER.alias, ask: "A break from gambling", duration: input.duration, contact: input.contact, note, origin: "Customer-requested break", source: "Customer app (simulated channel)", reference: "REQ-0001", basis: "The customer's own request. Nothing is inferred.", freshness: "Current" },
     };
-    const r = openCoordination(this.config, event, { destination: REVIEWER.memberId }, this.customerActor(), this.facts());
+    const r = orchestrateMoment(
+      this.config,
+      null,
+      { kind: "event", event, routing: { destination: REVIEWER.memberId }, actor: this.customerActor() },
+      this.facts(),
+      `cycle-event-${this.n}`,
+    );
     if (!r.ok) return this.fail(CUSTOMER.alias, "Submitted a break request", r);
     this.state = r.state;
     this.evidence.push(...r.evidence);
@@ -452,7 +499,13 @@ export class ProtectionWorld {
         freshness: CONTEXT_LABEL[ctx],
       },
     };
-    const r = openCoordination(this.config, event, { destination: REVIEWER.memberId }, this.intake(), this.facts());
+    const r = orchestrateMoment(
+      this.config,
+      null,
+      { kind: "event", event, routing: { destination: REVIEWER.memberId }, actor: this.intake() },
+      this.facts(),
+      `cycle-event-${this.n}`,
+    );
     if (!r.ok) return this.fail(this.who(this.intake()), did, r);
     this.state = r.state;
     this.evidence.push(...r.evidence);
@@ -481,12 +534,16 @@ export class ProtectionWorld {
   }
   /** The kernel prepares the configured plan as proposals only. Nothing is approved or sent. */
   preparePlan(): Outcome {
-    if (this.scenario === "early-support") return this.fail("JALDO Core (automation)", "Prepared the configured plan", { code: "not_in_scenario", message: "The configured plan prepares P1 account and marketing proposals. It is never prepared for an operator-originated review: a signal creates no restriction. (Scenario-scoped plans are a Core gap.)" });
+    if (this.scenario === "early-support") return this.fail("JALDO Core (automation)", "Prepared the configured plan", { code: "not_in_scenario", message: "This system-originated review uses its own configured Core recommendation, not the customer-requested break plan. A source signal creates no account or marketing restriction." });
     if (!this.state) return { ok: false, code: "not_found", message: "No request is open." };
-    const r = runAnticipatoryCycle(this.config, this.state, this.facts(), `cycle-${++this.n}`);
+    const r = orchestrateMoment(this.config, this.state, { kind: "tick" }, this.facts(), `cycle-${++this.n}`);
+    if (!r.ok) return this.fail("JALDO Core (automation)", "Prepared the configured plan", r);
     this.state = r.state;
     this.evidence.push(...r.evidence);
-    this.record("JALDO Core (automation)", "Prepared the configured plan as proposals", true, r.evidence.length ? r.evidence.map((e) => e.text).join(" ") : "Nothing new to prepare.");
+    this.record("JALDO Core (automation)", "Checked the configured plan", true, r.report.automated.length ? r.report.automated.join("; ") : "Nothing new to prepare.");
+    for (const automated of r.report.automated) {
+      this.record("JALDO Core (automation)", automated, true, "Configured proposal only. No human approval, send or completion is implied.");
+    }
     return { ok: true, note: "Prepared." };
   }
   approve(actionId: string): Outcome {
@@ -516,13 +573,27 @@ export class ProtectionWorld {
       const sys = a.recipient as ConnectorKey | null;
       if (sys && last) {
         const text =
-          last.result === "delivered" ? `Request ${last.key} received. Reference ${last.reference ?? "none"}. No response yet.`
+          last.result === "delivered" ? `Request ${last.key} was delivered to the simulated connector. Destination receipt is not yet recorded. Reference ${last.reference ?? "none"}.`
           : last.result === "failed" ? `Request ${last.key} refused: ${last.reason}.`
           : `Request ${last.key}: no response before the time limit.`;
         this.connectorLog.push({ at: this.now, system: sys, actionId, text });
       }
+      if (this.automaticSystemResponses) this.scheduleSystemResponse(actionId);
     }
     return out;
+  }
+
+  private scheduleSystemResponse(actionId: string) {
+    const generation = this.responseGeneration;
+    const timer = setTimeout(() => {
+      this.responseTimers.delete(timer);
+      if (!this.automaticSystemResponses || generation !== this.responseGeneration) return;
+      const next = this.nextConnectorStep(actionId);
+      if (!next.step) return;
+      const result = this.connectorStep(actionId);
+      if (result.ok && next.step !== "complete") this.scheduleSystemResponse(actionId);
+    }, 450);
+    this.responseTimers.add(timer);
   }
   propose(actionType: string, fromRecommendation?: string): Outcome {
     const t = this.config.actions.find((x) => x.id === actionType)!;
@@ -598,7 +669,13 @@ export class ProtectionWorld {
       context: { party: partyKey, status },
     };
     const did = `Recorded that ${this.partyLabel(partyKey)} is ${status}`;
-    const r = ingestEvent(this.config, this.state, event, this.operations(), this.facts());
+    const r = orchestrateMoment(
+      this.config,
+      this.state,
+      { kind: "event", event, actor: this.operations() },
+      this.facts(),
+      `cycle-event-${this.n}`,
+    );
     if (!r.ok) {
       if (status === "unavailable") this.unavailable.delete(partyKey);
       else this.unavailable.add(partyKey);

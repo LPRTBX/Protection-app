@@ -405,10 +405,10 @@ describe("Interruption: no blind retry, no new channel, no new recipient, fresh 
     const w = prepared("p2-unaccepted"); w.approve("IAM-1"); w.dispatch("IAM-1");
     assert.equal(w.connectorStep("IAM-1").ok, false);
     assert.equal(operationsView(w).delivery[0].notYetAccepted, true);
-    assert.equal(w.recommendations().length, 0);
+    assert.ok(w.recommendations().every((item) => item.ruleId === "request-awaiting"), "the still-unexplained source context remains a separate review item");
     w.advanceDays(1);
-    const rec = w.recommendations();
-    assert.equal(rec[0].ruleId, "expectation-passed"); assert.equal(rec[0].pathway, null);
+    const rec = w.recommendations().find((item) => item.ruleId === "expectation-passed");
+    assert.ok(rec); assert.equal(rec.pathway, null);
     assert.equal(w.dispatch("IAM-1").ok, false);
     assert.equal(w.action("IAM-1")!.attempts.length, 1);
     assert.equal(customerView(w).invitation, null);

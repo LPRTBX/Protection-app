@@ -29,7 +29,10 @@ export function OpsPanel(props: Omit<FrameProps, "id" | "title" | "sees" | "chil
   const [open, setOpen] = useState<OpenMap>({});
   const [outcome, setOutcome] = useOutcome();
   const rows: OpsRow[] = [...v.account, ...v.marketing, ...v.support];
-  const shown = v.systems.filter((s) => ALWAYS.has(s.key as ConnectorKey) || rows.some((r) => r.systemKey === s.key));
+  // P2 outreach is intentionally lifecycle-only in Operations: do not render recipient fields, message wording,
+  // attempts, or source/context details in this role's system panel.
+  const earlySupportRows: OpsRow[] = w.scenario === "early-support" ? [...v.delivery, ...v.clarification] : [];
+  const shown = v.systems.filter((s) => ALWAYS.has(s.key as ConnectorKey) || rows.some((r) => r.systemKey === s.key) || earlySupportRows.some((r) => r.systemKey === s.key));
   return (
     <PanelFrame
       id="operations"
@@ -54,6 +57,7 @@ export function OpsPanel(props: Omit<FrameProps, "id" | "title" | "sees" | "chil
           {shown.map((s) => {
             const key = s.key as ConnectorKey;
             const mine = rows.filter((r) => r.systemKey === key);
+            const lifecycle = earlySupportRows.filter((r) => r.systemKey === key);
             const script = w.scripts[key];
             return (
               <section key={key} className="destination" aria-label={s.label} data-system={key} data-change-key={`system:${key}`}>
@@ -62,7 +66,7 @@ export function OpsPanel(props: Omit<FrameProps, "id" | "title" | "sees" | "chil
                   <span className="chip chip-simulation" data-status="simulation"><span aria-hidden="true" className="chip-mark">◐</span>Simulated destination</span>
                 </header>
                 {s.unavailable ? <p className="note attention" data-testid="system-unavailable"><strong>Recorded as unavailable.</strong> Work it accepted keeps its acceptance and becomes an open need.</p> : null}
-                {mine.length === 0 ? <p className="muted" data-testid="nothing-sent">Nothing has been sent to this system.</p> : null}
+                {mine.length === 0 && lifecycle.length === 0 ? <p className="muted" data-testid="nothing-sent">Nothing has been sent to this system.</p> : null}
                 {mine.map((r) => {
                   const cls = classifyOpsRow(r);
                   const delivered = r.attempts.some((t) => t.result === "delivered");
@@ -80,6 +84,27 @@ export function OpsPanel(props: Omit<FrameProps, "id" | "title" | "sees" | "chil
                     </div>
                   );
                 })}
+                {lifecycle.map((r) => (
+                  <article
+                    key={r.id}
+                    className="destination-row p2-lifecycle"
+                    aria-label={`${r.short} ${r.id} lifecycle status`}
+                    data-testid="p2-system-status"
+                    data-action={r.typeId}
+                    data-stage={r.stage}
+                  >
+                    <h4>{r.short} <span className="muted">({r.id})</span></h4>
+                    <p className="sent-line"><strong>{r.stageLabel}.</strong> {r.stageDetail}</p>
+                    {r.authorisedBy ? <p className="muted">Approved by {r.authorisedBy} · {r.authorisedAt}</p> : null}
+                    {r.readBack.available
+                      ? r.readBack.last
+                        ? <p className="muted">Separate simulated read-back: {r.readBack.last.result}. This does not show that the action helped.</p>
+                        : <p className="muted">No separate read-back is recorded. This is not confirmed.</p>
+                      : null}
+                    {r.stage === "unresolved" ? <p className="note attention">Unresolved. No completion or destination confirmation is recorded.</p> : null}
+                    <p className="muted">Scoped lifecycle status only · fictional destination</p>
+                  </article>
+                ))}
                 <div className="destination-controls" role="group" aria-label={`Simulated destination controls for ${s.label}`} data-testid={`controls-${key}`}>
                   <h4>Simulated destination controls · {s.label}</h4>
                   <p className="muted">Played by the demonstration. These settings decide how this system answers; they are not Operations staff and not the reviewer.</p>

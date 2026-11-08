@@ -1,8 +1,8 @@
 import { loadConfiguration, type DeploymentConfiguration } from "@workspace/jaldo-orchestration";
 
 /**
- * JALDO Protection — two scenarios in ONE fictional deployment configuration: P1 "customer asks for a break" and P2 "an upstream
- * source asks for a human early-support review". Scenario scoping, current-context and contact-permission checks are demo-boundary checks in
+ * JALDO Protection — two versioned fictional Core configurations: P1 "customer asks for a break" and P2 "an upstream
+ * source asks for a human early-support review". Current-context and contact-permission checks remain demo-boundary checks in
  * `src/sim/session.ts`, not kernel rules (see docs/protection-app/P2-design.md §1 and §10).
  *
  *
@@ -565,3 +565,43 @@ export const PROTECTION_CONFIGURATION = {
 
 /** Validated by the shared kernel's own loader. A malformed configuration throws; it never loads partially. */
 export const PROTECTION: DeploymentConfiguration = loadConfiguration(PROTECTION_CONFIGURATION);
+
+/**
+ * The operator-originated event is a separate fictional Core configuration, not a different coordination engine.
+ * It has no P1 action plan. Core can recommend a reference-only context clarification; optional customer outreach remains
+ * behind the preview's explicit context/contact checks because Core does not yet enforce those permissions in production.
+ */
+export const PROTECTION_EARLY_SUPPORT_CONFIGURATION = {
+  ...PROTECTION_CONFIGURATION,
+  id: "protection-early-support",
+  label: "JALDO Protection: operator-originated early-support review (fictional configuration)",
+  recognition: {
+    ...PROTECTION_CONFIGURATION.recognition,
+    rules: [...PROTECTION_CONFIGURATION.recognition.rules, "request-awaiting"],
+    initialResponse: "context-clarification-request",
+    plan: [],
+    wording: {
+      ...PROTECTION_CONFIGURATION.recognition.wording,
+      "request-awaiting": {
+        title: "The source asked for a human review",
+        fact: "A simulated upstream source requested review. Its reason code is not explained or verified here.",
+        why: "The request warrants review, not a conclusion about the customer. Request the source's basis before optional contact.",
+        whoDecides: "The Protection reviewer decides whether to ask the upstream source for clarification. Only a person can approve and send that request.",
+        unknowns: [
+          "What the source's reason code means",
+          "What supporting context the source holds",
+          "What the customer wants; no customer request or consent is recorded",
+        ],
+        alternatives: [
+          { label: "Ask the source for context", why: "A request for review is not evidence of harm; the source must supply its basis." },
+          { label: "Do not proceed", why: "A person may decline or defer the review." },
+        ],
+        guidance: [
+          { text: "Treat a source request as a reason to review, not as evidence about the customer.", source: "Fictional Protection review procedure 2026.1" },
+        ],
+      },
+    },
+  },
+} as const;
+
+export const PROTECTION_EARLY_SUPPORT: DeploymentConfiguration = loadConfiguration(PROTECTION_EARLY_SUPPORT_CONFIGURATION);

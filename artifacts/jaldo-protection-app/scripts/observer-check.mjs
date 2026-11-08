@@ -70,18 +70,16 @@ async function customerSend(page) {
   await c.getByRole("button", { name: "Send my request" }).click();
 }
 async function freshObserver(page) {
-  await page.goto(BASE); await page.waitForSelector("h1");
-  await page.getByTestId("experience-observe").getByRole("link", { name: "See coordination across roles" }).click();
+  await page.goto(`${BASE}#/observe`); await page.waitForSelector("h1");
   await page.waitForSelector("#panel-customer");
 }
-/** Take responsibility, prepare the plan and approve each protection individually (no send). */
+/** Take responsibility; the shared Core orchestrator prepares proposals automatically, which remain individually approvable. */
 async function reviewerApprove(page, ids) {
   const rev = panel(page, "reviewer");
   await reviewerStep(page, "Decision");
   const fs = rev.locator("#responsibility fieldset.review");
   for (const cb of await fs.getByRole("checkbox").all()) await cb.check();
   await fs.getByRole("button", { name: "Take responsibility for this request" }).click();
-  await rev.getByRole("button", { name: "Prepare the configured plan" }).click();
   for (const [id, label] of ids) await reviewed(rcard(page, id), label);
 }
 const ACB = ["Account break ACB-1", "Approve: Account break"], MKT = ["Marketing suppression MKT-1", "Approve: Marketing suppression"];
@@ -93,10 +91,64 @@ try {
     console.log("\n[front door]");
     await page.goto(BASE); await page.waitForSelector("h1");
     const order = await page.locator("[data-testid^=experience-]").evaluateAll((els) => els.map((e) => e.getAttribute("data-testid")));
-    ok(JSON.stringify(order) === JSON.stringify(["experience-observe", "experience-explore", "experience-reviewer"]), `three entries, with "See coordination across roles" first (${order.join(", ")})`);
-    ok((await page.getByTestId("experience-observe").getByRole("link", { name: "See coordination across roles" }).count()) === 1 && /start here/i.test(await page.getByTestId("experience-observe").innerText()), "See coordination across roles is the primary entry");
+    ok(JSON.stringify(order) === JSON.stringify(["experience-observe", "experience-explore", "experience-reviewer"]), `three entries, with the system-event replay first (${order.join(", ")})`);
+    ok((await page.getByTestId("experience-observe").getByRole("link", { name: "Start the fictional system-event replay" }).count()) === 1 && /start here/i.test(await page.getByTestId("experience-observe").innerText()), "the fictional system-event replay is the primary entry");
+    ok((await page.getByTestId("experience-observe").getByRole("link", { name: "Or start with a customer-requested break" }).count()) === 1, "the customer-requested route remains a separate entry");
     ok((await page.getByTestId("experience-explore").getByRole("link", { name: "Explore the system" }).count()) === 1 && (await page.getByTestId("experience-reviewer").getByRole("link", { name: "Experience the reviewer role" }).count()) === 1, "Explore the system and Experience the reviewer role remain");
     await axeRun(page, "front door"); await shot(page, "observer-0-front-door");
+    await ctx.close();
+  }
+
+  // ───────── Main journey: system event first, Core review recommendation, human gate, simulated partial response
+  {
+    const ctx = await browser.newContext({ viewport: PHONE }); const page = await ctx.newPage(); watch(page);
+    console.log("\n[mobile system-event replay] no customer report, no inferred harm, no approval bypass");
+    await page.goto(BASE); await page.waitForSelector("h1");
+    await page.getByTestId("experience-observe").getByRole("link", { name: "Start the fictional system-event replay" }).click();
+    await page.waitForSelector("#panel-customer");
+    ok(await page.getByTestId("system-origin").isVisible(), "a labelled synthetic upstream event starts review without a customer report");
+    ok((await page.getByTestId("system-origin").innerText()).includes("not interpreted or verified"), "source reason stays uncertain and unscored");
+    ok(await noOverflow(page), "system-originated start has no phone-width overflow");
+
+    await page.getByTestId("switch-reviewer").click();
+    const rev = panel(page, "reviewer");
+    await reviewerStep(page, "Decision");
+    const responsibility = rev.locator("#responsibility fieldset.review");
+    for (const cb of await responsibility.getByRole("checkbox").all()) await cb.check();
+    await responsibility.getByRole("button", { name: "Take responsibility for this request" }).click();
+    const recommendation = rev.locator("#recommendation-request-awaiting");
+    await recommendation.waitFor({ state: "visible" });
+    ok((await recommendation.innerText()).includes("The source asked for a human review"), "the shared Core rule produces an eligible, uncertainty-labelled recommendation after reviewer acceptance");
+    await openEntries(recommendation);
+    ok((await recommendation.innerText()).includes("not a conclusion about the customer"), "the recommendation does not infer harm");
+    await recommendation.getByRole("button", { name: /Propose: Ask the upstream source/ }).click();
+    const clarification = rcard(page, "Context clarification request");
+    await openEntries(clarification);
+    ok(await clarification.getByRole("button", { name: "Put forward for approval" }).isVisible(), "a Core recommendation creates only a proposal");
+    ok((await clarification.getByRole("button", { name: /Send to/ }).count()) === 0, "there is no send before submission and fresh approval");
+    await clarification.getByRole("button", { name: "Put forward for approval" }).click();
+    await reviewed(clarification, "Approve: Context clarification request");
+    ok((await clarification.getByRole("button", { name: /Send to/ }).count()) === 1, "approval enables a separate send but does not deliver it");
+    await clarification.getByRole("button", { name: /Send to/ }).click();
+    await page.waitForFunction(() => document.querySelector('#panel-reviewer article[aria-label^="Context clarification request"]')?.getAttribute("data-stage") === "unresolved", null, { timeout: 6000 });
+    ok(await noOverflow(page), "unresolved source response has no phone-width overflow");
+
+    await reviewerStep(page, "Decision");
+    await rev.getByRole("button", { name: "Prepare the early-support check-in" }).click();
+    const checkin = rcard(page, "In-app message");
+    await openEntries(checkin);
+    await checkin.getByRole("button", { name: "Put forward for approval" }).click();
+    await reviewed(checkin, "Approve: In-app message");
+    ok((await checkin.getByRole("button", { name: /Send to/ }).count()) === 1, "optional outreach remains a distinct approval and send");
+    await checkin.getByRole("button", { name: /Send to/ }).click();
+    await page.waitForFunction(() => document.querySelector('#panel-reviewer article[aria-label^="In-app message"]')?.getAttribute("data-stage") === "applied", null, { timeout: 6000 });
+    ok((await checkin.getAttribute("data-stage")) === "applied", "the configured simulated in-app system advances its own receipt, acceptance and execution");
+    ok((await checkin.innerText()).includes("Not confirmed"), "execution remains separate from read-back and reviewer confirmation");
+    await page.getByTestId("switch-operations").click();
+    const inApp = dest(page, "in-app-channel");
+    ok((await inApp.locator('[data-testid="p2-system-status"][data-action="early-support-checkin"]').getAttribute("data-stage")) === "applied", "Operations sees reported execution without treating it as verified");
+    ok((await dest(page, "upstream-source").locator('[data-testid="p2-system-status"][data-action="context-clarification-request"]').getAttribute("data-stage")) === "unresolved", "the unresolved source remains visible rather than being reported complete");
+    await axeRun(page, "mobile system-event replay"); await shot(page, "observer-system-event-phone");
     await ctx.close();
   }
 

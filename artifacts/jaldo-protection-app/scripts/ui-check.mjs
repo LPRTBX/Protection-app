@@ -244,8 +244,7 @@ try {
     await open(page, "operator");
     await shot(page, "07-operator-review-1440");
     await reviewed(page, page, "Take responsibility for this request");
-    await click(page, "Prepare the configured plan");
-    ok(await page.getByText("Break request procedure (fictional)").first().isVisible(), "applicable policies are listed after the plan is prepared");
+    ok(await page.getByText("Break request procedure (fictional)").first().isVisible(), "Core prepares proposals and lists applicable policies after responsibility is accepted");
     ok((await body(page)).includes("Needs attention") === false, "no policy check needs attention for a request with contact permitted");
     await shot(page, "08-operator-policies-authority-1440");
     const acb = card(page, "Account break ACB-1");
@@ -329,7 +328,6 @@ try {
     await open(page, "customer/options"); await click(page, "Ask for a break"); await click(page, "Review your request"); await click(page, "Send my request");
     await open(page, "operator");
     await reviewed(page, page, "Take responsibility for this request");
-    await click(page, "Prepare the configured plan");
     return { ctx, page };
   };
   const approveSend = async (page, short, id) => {
@@ -468,7 +466,6 @@ try {
     await click(page, "Review your request"); await click(page, "Send my request");
     await open(page, "operator");
     await reviewed(page, page, "Take responsibility for this request");
-    await click(page, "Prepare the configured plan");
     const prop = page.getByRole("button", { name: "Propose a support handover" });
     ok(await prop.isDisabled(), "optional support outreach is not offered when permission is declined");
     ok((await body(page)).includes("NOT permitted right now"), "the operator sees why, and that the refusal is also at the command boundary");
@@ -759,7 +756,6 @@ try {
     await page.keyboard.press("Enter");
     ok(await page.evaluate(() => document.activeElement?.tagName === "SUMMARY" && document.activeElement.parentElement.id === "authority"), "activating the Authority link from the keyboard lands on its summary");
     await reviewed(page, page, "Take responsibility for this request");
-    await click(page, "Prepare the configured plan");
     for (const [id, label] of [["Account break ACB-1", "Approve: Account break"], ["Marketing suppression MKT-1", "Approve: Marketing suppression"]]) {
       const c = card(page, id);
       await reviewed(page, c, label);

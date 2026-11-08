@@ -120,14 +120,16 @@ describe("The observer view: layout, labelling, no scripted advance, no role swi
     const h = html(new ProtectionWorld());
     const order = [...h.matchAll(/data-testid="experience-(\w+)"/g)].map((m) => m[1]);
     assert.deepEqual(order, ["observe", "explore", "reviewer"]);
-    assert.match(text(h), /See coordination across roles/);
-    assert.match(h, /href="#\/observe"/); assert.match(h, /href="#\/guide"/); assert.match(h, /href="#\/reviewer"/);
+    assert.match(text(h), /Start a fictional system-event replay/);
+    assert.match(text(h), /customer-requested break/);
+    assert.equal([...h.matchAll(/href="#\/observe"/g)].length, 2, "system-originated and customer-originated routes are separate starts");
+    assert.match(h, /href="#\/guide"/); assert.match(h, /href="#\/reviewer"/);
   });
   it("is labelled a demonstration observer view and states the layout is presentation, not authentication", () => {
     const t = text(html(new ProtectionWorld(), "observe"));
     assert.match(t, /Demonstration observer view/);
     assert.match(t, /This layout is presentation, not authentication\. Server-enforced access remains a production requirement/);
-    assert.match(t, /Nothing here advances by itself/);
+    assert.match(t, /manual simulated destination controls/);
     assert.match(t, /each person sees only their own screen/);
     assert.match(t, /A change made in one panel appears in the others as soon as it happens/);
   });
@@ -190,7 +192,8 @@ describe("The observer view: layout, labelling, no scripted advance, no role swi
     assert.match(h, /aria-label="Reviewer steps"/); assert.match(h, /aria-label="Operations sections"/); assert.match(h, /aria-label="Customer app"/);
   });
   it("an early-support session is flagged, not silently shown without a customer", () => {
-    const w = new ProtectionWorld(); w.selectScenario("early-support");
-    assert.match(html(w, "observe"), /data-testid="wrong-scenario"/);
+    const w = new ProtectionWorld(); w.selectScenario("early-support"); w.admitSignal();
+    assert.match(html(w, "observe"), /data-testid="system-origin"/);
+    assert.match(text(html(w, "observe")), /customer has not reported a problem or asked for a break/);
   });
 });

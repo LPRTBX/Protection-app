@@ -19,21 +19,31 @@ export function Start() {
         <p className="ctx-labels"><StatusChip status="simulation" /> <span><strong>Simulation.</strong> Fictional data, in this browser only. No live systems.</span></p>
       </div>
       <main id="main" className="main start" tabIndex={-1}>
-        <h1 id="screen-title" tabIndex={-1}>Choose how to experience Protection</h1>
-        <p className="lede">Three separate experiences of the same fictional simulation. Each starts with a clean session.</p>
+        <h1 id="screen-title" tabIndex={-1}>See Protection coordinate around an event</h1>
+        <p className="lede">Start with a fictional system signal, not a customer report. Shared Core rules explain what can be reviewed; people still decide.</p>
 
         <section className="card experience primary-experience" data-testid="experience-observe" aria-labelledby="exp-observe-h">
           <p className="tag-primary">Start here</p>
-          <h2 id="exp-observe-h">See coordination across roles</h2>
+          <h2 id="exp-observe-h">Start a fictional system-event replay</h2>
           <p className="who">For partners and funders</p>
-          <p>Watch the customer, the protection reviewer and Operations with their connected systems side by side, all reading one fictional session. Do something in one panel and see the others change.</p>
+          <p>An upstream source event opens a human review and brings its limited context into the reviewer and Operations views. No issue is inferred and no customer request is invented.</p>
           <ul className="list">
-            <li>The customer sends a request and the reviewer sees it</li>
-            <li>The reviewer takes responsibility and approves each action; sending reaches the destination</li>
-            <li>Each destination receives, accepts and executes only when its simulated controls are used</li>
-            <li>Verification and an authorised message update the customer; a partial failure leaves the gap visible</li>
+            <li>Configured Core rules recommend asking the source to clarify what remains unknown</li>
+            <li>The reviewer takes responsibility and separately approves any action</li>
+            <li>Configured fictional destinations respond after an authorised send; an uncertain response remains unresolved</li>
+            <li>Read-back and reviewer confirmation remain separate; no outcome is claimed as helpful</li>
           </ul>
-          <a className="btn btn-primary" href="#/observe" onClick={() => w.reset()}>See coordination across roles</a>
+          <a className="btn btn-primary" href="#/observe" onClick={(e) => {
+            e.preventDefault();
+            const started = w.startSystemEventReplay();
+            if (started.ok) window.location.hash = "#/observe";
+          }}>Start the fictional system-event replay</a>
+          <p className="muted">The source event, rules and destination responses are simulated in this browser. There is no live Core, AI or sector connection.</p>
+          <p><a href="#/observe" onClick={(e) => {
+            e.preventDefault();
+            const ready = w.startCustomerRequestDemo();
+            if (ready.ok) window.location.hash = "#/observe";
+          }}>Or start with a customer-requested break</a></p>
         </section>
 
         <p className="muted secondary-intro">Or explore one thing at a time:</p>
