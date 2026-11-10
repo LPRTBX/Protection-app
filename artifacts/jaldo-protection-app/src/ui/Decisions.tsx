@@ -144,10 +144,10 @@ export function Decisions({ v, run, open, setOpen }: { v: OperatorView; run: (k:
           {cls.group === "waiting" && cls.blocker ? <p className="blocker"><strong>Not available yet:</strong> {cls.blocker}</p> : null}
           <ReviewEntry id={`recommendation-${r.id}`} open={open} setOpen={setOpen}>
             <p className="muted">{r.why}</p>
-            <p className="muted"><strong>Who decides:</strong> {r.whoDecides}</p>
             <h5>What is not known</h5>
             <ul className="list">{r.unknowns.map((u) => <li key={u}>{u}</li>)}</ul>
             <p className="muted">Derived by configured rules. A recommendation cannot approve or send anything.</p>
+            <p className="muted"><strong>Who decides:</strong> {r.whoDecides}</p>
             <h5>Your decision</h5>
             <Offers offers={r.offers} onRun={(k) => run(k)} />
           </ReviewEntry>

@@ -786,6 +786,6 @@ export function operationsView(w: ProtectionWorld): OperationsView {
     evidence,
     connectorLog: w.connectorLog.filter((l) => l.actionId === null || ids.has(l.actionId)).map((l) => ({ at: fmt(l.at), system: w.partyLabel(l.system), actionId: l.actionId, text: l.text })),
     readBacks: w.readBacks.filter((r) => ids.has(r.actionId)).map((r) => ({ actionId: r.actionId, at: fmt(r.at), result: r.result, reference: r.reference })),
-    systems: (w.scenario === "early-support" ? (["in-app-channel", "upstream-source"] as const) : (["account-controls", "account-controls-manual", "marketing-suppression", "marketing-suppression-manual"] as const)).map((key) => ({ key, label: w.partyLabel(key), unavailable: w.unavailable.has(key) })),
+    systems: (w.scenario === "early-support" ? (["in-app-channel", "upstream-source"] as const) : (["account-controls", "account-controls-manual", "marketing-suppression", "marketing-suppression-manual", "support-team"] as const)).map((key) => ({ key, label: w.partyLabel(key), unavailable: w.unavailable.has(key) })),
   };
 }

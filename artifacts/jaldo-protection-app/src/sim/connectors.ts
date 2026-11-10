@@ -78,6 +78,12 @@ export const PRESETS = [
     detail: "Everything works until Protection Operations records the account system as unavailable after it accepted.",
     scripts: {},
   },
+  {
+    id: "handover-unaccepted",
+    label: "Support handover not accepted",
+    detail: "The support team is sent the handover, with no acceptance recorded. Advancing the clock past the configured expectation lets Core recognise the gap.",
+    scripts: { "support-team": { behaviour: "no-acknowledgement" } },
+  },
 ] as const satisfies readonly { id: string; label: string; detail: string; scripts: Partial<Record<ConnectorKey, Partial<ConnectorScript>>> }[];
 export type PresetId = (typeof PRESETS)[number]["id"];
 

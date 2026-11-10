@@ -98,6 +98,7 @@ export function Guide() {
             <li><strong>One outcome is unknown.</strong> A timed-out send is never retried. A separate reconciler checks the receiving system's own log and records the finding.</li>
             <li><strong>Approved but never accepted.</strong> After a day the kernel recognises the expectation has passed. Nothing is re-sent.</li>
             <li><strong>Interrupted after accepting.</strong> A fresh recovery proposal needs a person with approval authority; no earlier approval is reused.</li>
+            <li><strong>A support handover not accepted.</strong> Operations can identify the support team as a connected destination and see that nothing was accepted. After the configured expectation passes, the kernel recognises the gap; there is no configured recovery pathway, so a person decides.</li>
           </ul>
         )}
         <p><a className="btn btn-quiet" href="#/simulation">Open Simulation controls</a> <span className="muted">Open gaps right now: <strong>{ops.gaps.length}</strong></span></p>
