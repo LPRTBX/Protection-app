@@ -164,12 +164,12 @@ describe("Early-support (P2) rendered structure and wording", () => {
     assert.ok(p.includes("In-app message delivery"));
     for (const never of ["early-support", "Early-support", "check-in", "invitation", "optional", "contact choice", "review request"]) assert.equal(p.toLowerCase().includes(never.toLowerCase()), false, `Operations text mentions "${never}"`);
   });
-  it("a recommendation card states recognised, evidence, uncertainty and the decision before who decides", () => {
+  it("a recommendation card states recognised, evidence and uncertainty, then who decides, before the decision buttons", () => {
     const h = html(early("admitted"), "operator");
     const card = h.slice(h.indexOf('id="recommendation-request-awaiting"'));
     const section = card.slice(0, card.indexOf("</section>"));
     const t = text(section);
-    const order = ["The source asked for a human review", "What is not known", "Your decision", "Not now", "Who decides:"];
+    const order = ["The source asked for a human review", "What is not known", "Who decides:", "Your decision", "Not now"];
     let last = -1;
     for (const marker of order) {
       const at = t.indexOf(marker);

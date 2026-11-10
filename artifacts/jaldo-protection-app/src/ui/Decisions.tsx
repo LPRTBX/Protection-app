@@ -147,9 +147,9 @@ export function Decisions({ v, run, open, setOpen }: { v: OperatorView; run: (k:
             <h5>What is not known</h5>
             <ul className="list">{r.unknowns.map((u) => <li key={u}>{u}</li>)}</ul>
             <p className="muted">Derived by configured rules. A recommendation cannot approve or send anything.</p>
+            <p className="muted"><strong>Who decides:</strong> {r.whoDecides}</p>
             <h5>Your decision</h5>
             <Offers offers={r.offers} onRun={(k) => run(k)} />
-            <p className="muted"><strong>Who decides:</strong> {r.whoDecides}</p>
           </ReviewEntry>
         </section>
       ),

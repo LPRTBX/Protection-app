@@ -386,6 +386,59 @@ try {
     await ctx.close();
   }
   {
+    console.log("\nSupport handover not accepted");
+    const { ctx, page } = await fresh("Support handover not accepted");
+    await click(page, "Propose a support handover");
+    const sup = card(page, "Support handover SUP-1");
+    await (await control(page, sup, "Put forward for approval")).click();
+    await reviewed(page, sup, "Approve: Support handover");
+    await (await control(page, sup, /Send to/)).click();
+    ok((await sup.getAttribute("data-stage")) === "sent", "the handover is Sent, with no acceptance recorded");
+
+    await open(page, "operations");
+    const supOps = card(page, "Support handover SUP-1");
+    ok(await supOps.getByText("Not yet accepted").isVisible(), "Operations flags it as not yet accepted");
+    await openSimulationControls(page);
+    ok(await page.getByTestId("simulation-controls").locator("strong", { hasText: "Support team (simulated)" }).isVisible(), "Operations identifies the support team as a connected destination, like every other system");
+    ok((await (await control(page, supOps, /Simulate:/)).isDisabled()), "the destination's own step is unavailable: a person cannot accept on its behalf");
+
+    await open(page, "simulation");
+    await click(page, "Advance one day");
+    await click(page, "Advance one day"); // the configured expectation for a support handover is two days, not one
+    await open(page, "operator");
+    ok((await body(page)).includes("An authorised action has not been accepted"), "once the configured expectation passes, Core recognises the gap");
+    ok((await body(page)).includes("Support handover"), "the recognised gap names the handover, not another action");
+    const supAfter = card(page, "Support handover SUP-1");
+    ok((await supAfter.getAttribute("data-stage")) === "sent", "still Sent: recognising the gap does not itself resend, accept or complete anything");
+    ok((await supAfter.getByRole("button", { name: /^Send/ }).count()) === 0, "the reviewer is offered no resend");
+    await shot(page, "28-operator-handover-unaccepted-1440");
+
+    await open(page, "operations");
+    const supOpsAfter = card(page, "Support handover SUP-1");
+    ok((await supOpsAfter.getAttribute("data-stage")) === "sent", "Operations also still shows it as Sent, not acknowledged or applied");
+    ok((await (await control(page, supOpsAfter, "Simulate: system takes its next step")).isDisabled()), "the only control left anywhere is the destination's own disabled step; a person cannot accept or complete on its behalf");
+
+    // the same recognised gap, read independently by the side-by-side observer view, all three panels visible at desktop width
+    await page.goto(`${BASE}#/observe`);
+    await page.waitForSelector("#panel-operations");
+    ok(await page.locator('#panel-operations section[data-system="support-team"]').isVisible(), "the observer Operations panel also identifies the support team, as its own destination");
+    const reviewerPanel = page.locator("#panel-reviewer");
+    await reviewerPanel.getByRole("link", { name: "Decision", exact: true }).click();
+    ok((await reviewerPanel.innerText()).includes("Support handover"), "the observer Reviewer panel's Decision step shows the same recognised gap, independently");
+    await shot(page, "29-observe-handover-unaccepted-1440");
+
+    // and at a phone width, one panel at a time, in the same in-memory world (no reload: panel switching, not a different session)
+    await page.setViewportSize(MOBILE);
+    await page.getByTestId("switch-operations").click();
+    ok(await page.locator('#panel-operations section[data-system="support-team"]').isVisible(), "mobile: switching to Operations still identifies the support team");
+    await shot(page, "30-observe-handover-unaccepted-mobile-operations-390");
+    await page.getByTestId("switch-reviewer").click();
+    ok((await page.locator("#panel-reviewer").innerText()).includes("Support handover"), "mobile: switching to Reviewer still shows the recognised gap");
+    await axeRun(page, "observe [mobile, handover not accepted]");
+    await shot(page, "31-observe-handover-unaccepted-mobile-reviewer-390");
+    await ctx.close();
+  }
+  {
     console.log("\nInterruption and recovery");
     const { ctx, page } = await fresh("Interrupted after accepting");
     await approveSend(page, "Account break", "ACB-1");

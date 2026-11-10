@@ -81,7 +81,7 @@ export const PRESETS = [
   {
     id: "handover-unaccepted",
     label: "Support handover not accepted",
-    detail: "The support team receives the handover and never accepts it. Advancing the clock past the configured expectation lets Core recognise the gap.",
+    detail: "The support team is sent the handover, with no acceptance recorded. Advancing the clock past the configured expectation lets Core recognise the gap.",
     scripts: { "support-team": { behaviour: "no-acknowledgement" } },
   },
 ] as const satisfies readonly { id: string; label: string; detail: string; scripts: Partial<Record<ConnectorKey, Partial<ConnectorScript>>> }[];
