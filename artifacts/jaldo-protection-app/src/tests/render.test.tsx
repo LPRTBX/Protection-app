@@ -164,6 +164,21 @@ describe("Early-support (P2) rendered structure and wording", () => {
     assert.ok(p.includes("In-app message delivery"));
     for (const never of ["early-support", "Early-support", "check-in", "invitation", "optional", "contact choice", "review request"]) assert.equal(p.toLowerCase().includes(never.toLowerCase()), false, `Operations text mentions "${never}"`);
   });
+  it("a recommendation card states recognised, evidence, uncertainty and the decision before who decides", () => {
+    const h = html(early("admitted"), "operator");
+    const card = h.slice(h.indexOf('id="recommendation-request-awaiting"'));
+    const section = card.slice(0, card.indexOf("</section>"));
+    const t = text(section);
+    const order = ["The source asked for a human review", "What is not known", "Your decision", "Not now", "Who decides:"];
+    let last = -1;
+    for (const marker of order) {
+      const at = t.indexOf(marker);
+      assert.ok(at >= 0, `missing "${marker}"`);
+      assert.ok(at > last, `"${marker}" is out of order`);
+      last = at;
+    }
+  });
+
   it("Simulation and Start here carry the scenario selector, and the reset affordance appears only with records", () => {
     assert.match(html(new ProtectionWorld(), "simulation"), /data-testid="scenario-picker"/);
     assert.match(html(new ProtectionWorld(), "guide"), /data-testid="scenario-picker"/);

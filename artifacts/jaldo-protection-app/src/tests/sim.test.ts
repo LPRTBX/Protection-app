@@ -165,6 +165,28 @@ describe("Failure and interruption", () => {
     assert.equal(customerView(w).parts.find((p) => p.id === "account")!.status, "not-started");
   });
 
+  it("the support team is a clearly identified connected destination, and a handover it never accepts becomes a recognised gap once the configured expectation passes", () => {
+    const w = opened();
+    w.applyPreset("handover-unaccepted");
+    assert.ok(operationsView(w).systems.some((s) => s.key === "support-team"), "Support team must be identified as a connected destination, like every other system");
+    w.propose("support-handover"); w.submit("SUP-1"); approveAndSend(w, "SUP-1");
+    const sys = operationsView(w).systems.find((s) => s.key === "support-team");
+    assert.ok(sys, "Support team must still be identified as a connected destination once a handover is sent");
+    assert.equal(sys!.unavailable, false);
+    assert.equal(w.connectorStep("SUP-1").ok, false, "this preset's support team never accepts it");
+    assert.equal(state(w, "SUP-1"), "sent");
+    assert.equal(w.recommendations().length, 0, "not yet overdue");
+    w.advanceDays(2);
+    const rec = w.recommendations();
+    assert.equal(rec.length, 1);
+    assert.equal(rec[0].ruleId, "expectation-passed");
+    assert.match(rec[0].fact, /Support handover/);
+    assert.equal(rec[0].pathway, null, "no recovery pathway is configured for a handover; a person decides");
+    // Operations can also record the destination itself as unavailable, independent of time passing.
+    assert.ok(w.recordCapacity("support-team", "unavailable").ok);
+    assert.equal(operationsView(w).systems.find((s) => s.key === "support-team")!.unavailable, true);
+  });
+
   it("interruption after accepting needs a FRESH proposal that needs approval authority", () => {
     const w = opened();
     approveAndSend(w, "ACB-1");

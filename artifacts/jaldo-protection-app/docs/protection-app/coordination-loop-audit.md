@@ -25,5 +25,16 @@ This records the standalone browser preview, not a production Core deployment. A
 3. A supported way for refreshed source context to update or reopen the same coordination without replacing history.
 4. Durable receiving-system acknowledgements, retries/reconciliation and independent verification.
 5. A Core-supported path from verified outcomes into reviewed, versioned learning records.
+6. Cross-system status-conflict recognition (see below).
 
 The preview intentionally does not substitute local services for these missing capabilities.
+
+### Gap: cross-system status-conflict recognition
+
+**What is missing.** Every recognition rule the kernel has today (`capacity-lost-after-acceptance`, `unavailable-before-acceptance`, `expectation-passed`, `deadline-passed`, `request-awaiting`) reasons about **one action's own lifecycle**: whether its recipient accepted it, stayed available, or answered in time. None of them compares a *fact already recorded for one action* against a *fact recorded for a different, independently-scheduled piece of work on the same subject*. There is no contract for a second system's own schedule (for example, a marketing platform's own send calendar) as a permitted fact the kernel can read at all, so a rule such as "a promotion is still scheduled after its suppression was approved" has nothing to recognise against. This preview deliberately does not fake that comparison with a local rule, per the standing instruction not to build a second orchestration engine.
+
+**Proposed acceptance case**, for Core to accept or reject on its own roadmap:
+
+> Given a `marketing-suppression` action that has reached `confirmed` for a subject, and a separately recorded fact that a promotional send is scheduled for that same subject with a `scheduled-for` instant after the suppression's `confirmed` instant, when the kernel runs its anticipatory cycle, then it recognises a `conflicting-schedule` moment naming both records, recommends asking the scheduling system to cancel or reschedule the send, and takes no action on either record itself. Recognising the moment requires no new write authority: Core would need (a) a contract for a destination's own schedule as a permitted, timestamped fact, and (b) a comparison rule, versioned like the existing ones in `recognition.wording`, that only reads already-recorded facts. The reviewer still decides what happens next.
+
+Until Core carries this contract, Protection cannot demonstrate this specific pattern without inventing a second source of truth, so it is left undemonstrated here and recorded as a gap instead.
